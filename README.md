@@ -21,7 +21,7 @@ var level = require('level');
 var replicate = require('level-2pc');
 var net = require('net');
 
-var db = level('./db', { valueEncoding: 'json' });
+var db1 = level('./db', { valueEncoding: 'json' });
 
 var a = replicate.createServer(db1);
 
@@ -84,6 +84,6 @@ setTimeout(function() {
     });
   }, 100);
 
-}, 1000);
+}, 100);
 ```
 
