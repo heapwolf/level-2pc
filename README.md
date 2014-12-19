@@ -2,7 +2,9 @@
 A two-phase-commit protocol for leveldb.
 
 # DESCRIPTION
-Provides strong-consistency for levevldb replication.
+Provides strong-consistency for local-cluster replication.
+Injectable transport (so it should work in the browser).
+
 
 # SPECIFICATION
 The algorithm for how this works is [`here`](/SPEC.md).
@@ -85,5 +87,22 @@ setTimeout(function() {
   }, 100);
 
 }, 100);
+```
+
+# TRANSPORT
+When the server wants to connect to the peers
+that have been specified, it defaults to using
+tcp from the `net` module. You can inject any
+transportation layer you want like this...
+
+```js
+var net = require('net');
+var opts = {};
+
+opts.transport = function() {
+  return net.connect.apply(null, arguments);
+};
+
+var a = replicate.createServer(db1, opts);
 ```
 
