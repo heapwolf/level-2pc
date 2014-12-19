@@ -64,8 +64,8 @@ net.createServer(function(con) {
 ```
 
 ### WRITE SOME DATA
-No go ahead and write some data to one of the
-servers and watcht the data magically appear in
+Now go ahead and write some data to one of the
+servers and watch the data magically appear in
 the other servers!
 
 ```js
