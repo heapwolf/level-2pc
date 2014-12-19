@@ -1,0 +1,30 @@
+{
+  "name": "level-2pc",
+  "version": "1.0.0",
+  "description": "A two-phase-commit protocol for leveldb.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "keywords": [
+    "leveldb",
+    "phase",
+    "two",
+    "phase",
+    "commit",
+    "protocol",
+    "replication",
+    "redundancy",
+    "p2p"
+  ],
+  "author": "hij1nx",
+  "license": "MIT",
+  "dependencies": {
+    "level-hooks": "git://github.com/dominictarr/level-hooks.git#async2",
+    "level-hyper": "^0.18.0",
+    "level-key": "^1.0.0",
+    "level-ttl": "^2.1.1",
+    "reconnect-core": "^0.2.1",
+    "rpc-stream": "^2.1.1"
+  }
+}
