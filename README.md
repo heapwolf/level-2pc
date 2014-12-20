@@ -2,9 +2,13 @@
 A two-phase-commit protocol for leveldb.
 
 # DESCRIPTION
-Provides strong-consistency for local-cluster replication.
-Injectable transport (so it should work in the browser).
+Provides strong-consistency for local-cluster replication. 
 
+Every node in your cluster can be writable and all reads 
+from any node will be consistent.
+
+Supports an injectable transport (so it should work in the 
+browser).
 
 # SPECIFICATION
 The algorithm for how this works is [`here`](/SPEC.md).
