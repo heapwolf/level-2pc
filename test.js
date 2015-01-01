@@ -3,7 +3,6 @@ var net = require('net');
 var rs = require('./index');
 var assert = require('assert');
 var rmrf = require('rimraf');
-var equal = require('lodash.isEqual')
 
 rmrf.sync('./db1');
 rmrf.sync('./db2');

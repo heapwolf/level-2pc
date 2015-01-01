@@ -10,6 +10,9 @@ from any node will be consistent.
 Supports an injectable transport (so it should work in the 
 browser).
 
+# BUILD STATUS
+[![Build Status](http://img.shields.io/travis/hij1nx/level-2pc.svg?style=flat)](https://travis-ci.org/hij1nx/level-2pc)
+
 # SPECIFICATION
 The algorithm for how this works is [`here`](/SPEC.md).
 
