@@ -15,16 +15,17 @@ function Server(localdb, opts) {
   opts = opts || {};
   var methods = {};
 
-  methods.quorum = function (key, value, cb) {
-    put.call(localdb, prefix + key, value, HR1, cb);
+  methods.quorum = function (key, value, type, cb) {
+    put.call(localdb, prefix + key, type, HR1, cb);
   };
   
-  methods.commit = function (key, value, cb) {
+  methods.commit = function (key, value, type, cb) {
+
     batch.call(
       localdb,
       [
         { type: 'del', key: prefix + key },
-        { type: 'put', key: key, value: value }
+        { type: type, key: key, value: value }
       ],
       cb
     );
@@ -47,7 +48,7 @@ function Server(localdb, opts) {
 
   Hooks(ttl(localdb));
 
-  function getQuorum(key, value, done) {
+  function getQuorum(key, value, type, done) {
 
     var phase = 'quorum';
     var index = 0;
@@ -59,7 +60,7 @@ function Server(localdb, opts) {
         var remote = connections[peer.port + peer.host];
        
         function write() {
-          remote[phase](key, value, function(err) {
+          remote[phase](key, value, type, function(err) {
             if (err) {
               return done(err);
             }
@@ -109,9 +110,9 @@ function Server(localdb, opts) {
     localdb.put(prefix + op.key, op.value, function (err) {
       if (err) return done(err);
 
-      getQuorum(op.key, op.value, function(err) {
+      getQuorum(op.key, op.value, op.type, function(err) {
         if (err) return done(err);
-        methods.commit(op.key, op.value, done);
+        methods.commit(op.key, op.value || '', op.type, done);
       });
     });
   });
