@@ -29,12 +29,14 @@ var net = require('net');
 
 var db1 = level('./db', { valueEncoding: 'json' });
 
-var a = replicate.createServer(db1);
+var opts = { 
+  peers: [
+    { host: 'localhost', port: 3001 }, 
+    { host: 'localhost', port: 3002 }
+  ]
+};
 
-a.peers = [
-  { host: 'localhost', port: 3001 }, 
-  { host: 'localhost', port: 3002 }
-];
+var a = replicate.createServer(db1, opts);
 
 net.createServer(function(con) {
   a.pipe(con).pipe(a);
@@ -43,12 +45,15 @@ net.createServer(function(con) {
 
 ### SERVER B
 ```js
-var b = rs.createServer(db2);
 
-b.peers = [
-  { host: 'localhost', port: 3000 }, 
-  { host: 'localhost', port: 3002 }
-];
+var opts = { 
+  peers: [
+    { host: 'localhost', port: 3000 }, 
+    { host: 'localhost', port: 3002 }
+  ]
+};
+
+var b = rs.createServer(db2, opts);
 
 net.createServer(function(con) {
   b.pipe(con).pipe(b);
@@ -57,12 +62,14 @@ net.createServer(function(con) {
 
 ### SERVER C
 ```js
-var c = rs.createServer(db3);
+var opts = { 
+  peers: [
+    { host: 'localhost', port: 3000 }, 
+    { host: 'localhost', port: 3001 }
+  ]
+};
 
-c.peers = [
-  { host: 'localhost', port: 3000 }, 
-  { host: 'localhost', port: 3001 }
-];
+var c = rs.createServer(db3);
 
 net.createServer(function(con) {
   c.pipe(con).pipe(c);

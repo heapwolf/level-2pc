@@ -73,10 +73,10 @@ server3.listen(3002);
 
 setTimeout(function() {
 
-  var records = Array.apply(null, new Array(2)).map(function() { 
+  var records = Array.apply(null, new Array(2000)).map(function() { 
     return { 
       key: Math.random().toString(15).slice(-12),
-      value: Math.random().toString(15).slice(2)
+      value: '\0'
     };
   }).sort(function (a, b) {
     if (a.key > b.key) {
