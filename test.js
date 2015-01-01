@@ -73,9 +73,9 @@ server3.listen(3002);
 
 setTimeout(function() {
 
-  var records = Array.apply(null, new Array(2000)).map(function() { 
+  var records = Array.apply(null, new Array(5000)).map(function() { 
     return { 
-      key: Math.random().toString(15).slice(-12),
+      key: Math.random().toString(15).slice(-100),
       value: '\0'
     };
   }).sort(function (a, b) {
@@ -97,7 +97,7 @@ setTimeout(function() {
  
         setTimeout(function() {
           [db2, db3].forEach(verify);
-        }, 1000); 
+        }, 2000); 
       }
     });
   });
