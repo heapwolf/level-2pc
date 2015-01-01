@@ -38,6 +38,7 @@ server1.listen(3000);
 var opts2 = { 
   peers: [
     { host: 'localhost', port: 3000 }, 
+    { host: 'localhost', port: 3000 }, 
     { host: 'localhost', port: 3002 }
   ]
 };
