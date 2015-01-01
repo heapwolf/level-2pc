@@ -72,7 +72,7 @@ server3.listen(3002);
 
 setTimeout(function() {
 
-  var records = Array.apply(null, new Array(5000)).map(function() { 
+  var records = Array.apply(null, new Array(3000)).map(function() { 
     return { 
       key: Math.random().toString(15).slice(-100),
       value: '\0'
