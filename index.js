@@ -34,7 +34,7 @@ function Server(localdb, opts) {
   var server = rpc(methods);
   var connections = {};
 
-  opts.peers.forEach(function(peer) {
+  server.addPeer = function(peer) {
     client = createClient(opts);
     client.connect(peer.port, peer.host);
 
@@ -43,8 +43,10 @@ function Server(localdb, opts) {
       remote = r.wrap(methods);
       connections[peer.port + peer.host] = r.wrap(methods);
       r.pipe(s).pipe(r);
-    });
-  });
+    }); 
+  };
+
+  opts.peers.forEach(server.addPeer);
 
   Hooks(ttl(localdb));
 
