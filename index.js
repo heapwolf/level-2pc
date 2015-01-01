@@ -31,8 +31,19 @@ function Server(localdb, opts) {
   }; 
 
   var server = rpc(methods);
+  var connections = {};
 
-  server.peers = [];
+  opts.peers.forEach(function(peer) {
+    client = createClient(opts);
+    client.connect(peer.port, peer.host);
+
+    client.on('connect', function(s) {
+      var r = rpc();
+      remote = r.wrap(methods);
+      connections[peer.port + peer.host] = r.wrap(methods);
+      r.pipe(s).pipe(r);
+    });
+  });
 
   Hooks(ttl(localdb));
 
@@ -42,24 +53,18 @@ function Server(localdb, opts) {
     var index = 0;
 
     !function connect() {
-      server.peers.map(function(peer) {
 
-        var client = createClient(opts);
-        client.connect(peer.port, peer.host);
+      opts.peers.map(function(peer) {
 
-        client.on('connect', function(stream) {
-
-          var client = rpc();
-          var remote = client.wrap(methods);
-          client.pipe(stream).pipe(client);
-
+        var remote = connections[peer.port + peer.host];
+       
+        function write() {
           remote[phase](key, value, function(err) {
-
             if (err) {
               return done(err);
             }
 
-            if (++index == server.peers.length) {
+            if (++index == opts.peers.length) {
               if (phase != 'quorum') {
                 return done();
               }
@@ -69,7 +74,32 @@ function Server(localdb, opts) {
               connect();
             }
           });
-        });
+        }
+
+        if (remote) {
+          return write();
+        }
+
+        var retrycount = 0;
+        var err = new Error('Connection Fail %s:%s', peer.host, peer.port);
+
+        var retry = setInterval(function() {
+
+          remote = connections[peer.port + peer.host];
+
+          if (++retrycount == opts.failAfter * 1e3) {
+            clearInterval(retry);
+            return done(err);
+          }
+
+          if (!remote) {
+            return;
+          }
+
+          clearInterval(retry);
+          write();
+        }, 100);
+
       });
     }();
   }

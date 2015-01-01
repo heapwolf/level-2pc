@@ -24,7 +24,11 @@
     "level-hyper": "^0.18.0",
     "level-key": "^1.0.0",
     "level-ttl": "^2.1.1",
+    "lodash.isequal": "^2.4.1",
     "reconnect-core": "^0.2.1",
-    "rpc-stream": "^2.1.1"
+    "rpc-stream": "git://github.com/hij1nx/rpc-stream.git"
+  },
+  "devDependencies": {
+    "rimraf": "^2.2.8"
   }
 }
