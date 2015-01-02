@@ -3,6 +3,7 @@ var createClient = require('./client');
 var Hooks = require('level-hooks');
 var net = require('net');
 var ttl = require('level-ttl');
+var log = require('debug')('level2pc');
 
 var prefix = '!!!';
 var HR1 = { ttl: 1000 * 60 * 60 };
@@ -17,12 +18,12 @@ function Server(localdb, opts) {
   var methods = {};
 
   methods.quorum = function (key, value, type, cb) {
-
+    log('quorum phase:', key, value, type);
     put.call(localdb, prefix + key, type, HR1, cb);
   };
   
   methods.commit = function (key, value, type, cb) {
-
+    log('commit phase:', key, value, type);
     batch.call(
       localdb,
       [
@@ -38,12 +39,14 @@ function Server(localdb, opts) {
   var loaded;
 
   server.addPeer = function(peer) {
-
+    
     if (loaded && opts.peers.some(function(p) {
       var host = p.host == peer.host;
       var port = p.port == peer.port;
       return host && port;
     })) return;
+
+    log('adding peer: %s:%s', peer.host, peer.port);
 
     client = createClient(opts);
     client.connect(peer.port, peer.host);
@@ -52,6 +55,7 @@ function Server(localdb, opts) {
     });
 
     client.on('connect', function(s) {
+      log('connected: %s:%s', peer.host, peer.port);
       var r = rpc();
       remote = r.wrap(methods);
       connections[peer.port + peer.host] = r.wrap(methods);
@@ -80,6 +84,7 @@ function Server(localdb, opts) {
        
         function write() {
           remote[phase](key, value, type, function(err) {
+            log('completed: %s phase', phase);
             if (err) {
               return done(err);
             }
@@ -104,6 +109,9 @@ function Server(localdb, opts) {
         var err = new Error('Connection Fail %s:%s', peer.host, peer.port);
 
         var retry = setInterval(function() {
+          
+          log('waiting for %s:%s', peer.host, peer.port);
+
           remote = connections[peer.port + peer.host];
 
           if (++retrycount == opts.failAfter * 1e3) {
@@ -131,6 +139,7 @@ function Server(localdb, opts) {
       getQuorum(op.key, op.value, op.type, function(err) {
         if (err) return done(err);
         methods.commit(op.key, op.value || '', op.type, done);
+        log('completed write for %s', op.key);
       });
     });
   });

@@ -20,6 +20,7 @@
   "author": "hij1nx",
   "license": "MIT",
   "dependencies": {
+    "debug": "^2.1.1",
     "level-hooks": "git://github.com/dominictarr/level-hooks.git#async2",
     "level-hyper": "^0.18.0",
     "level-key": "^1.0.0",
