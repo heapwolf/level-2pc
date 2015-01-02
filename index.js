@@ -47,6 +47,9 @@ function Server(localdb, opts) {
 
     client = createClient(opts);
     client.connect(peer.port, peer.host);
+    client.on('error', function(err) {
+      server.emit('error', err);
+    });
 
     client.on('connect', function(s) {
       var r = rpc();
