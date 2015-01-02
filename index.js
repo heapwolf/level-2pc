@@ -16,6 +16,7 @@ function Server(localdb, opts) {
   var methods = {};
 
   methods.quorum = function (key, value, type, cb) {
+
     put.call(localdb, prefix + key, type, HR1, cb);
   };
   
@@ -51,6 +52,10 @@ function Server(localdb, opts) {
       remote = r.wrap(methods);
       connections[peer.port + peer.host] = r.wrap(methods);
       r.pipe(s).pipe(r);
+      
+      if (opts.peers.indexOf(peer) == -1) {
+        opts.peers.push(peer);
+      }
     });
   };
 
@@ -65,7 +70,6 @@ function Server(localdb, opts) {
     var index = 0;
 
     !function connect() {
-
       opts.peers.map(function(peer) {
 
         var remote = connections[peer.port + peer.host];
@@ -96,7 +100,6 @@ function Server(localdb, opts) {
         var err = new Error('Connection Fail %s:%s', peer.host, peer.port);
 
         var retry = setInterval(function() {
-
           remote = connections[peer.port + peer.host];
 
           if (++retrycount == opts.failAfter * 1e3) {
