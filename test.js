@@ -37,7 +37,7 @@ server1.listen(3000);
 //
 var opts2 = { 
   peers: [
-    { host: 'localhost', port: 3000 }, 
+    { host: 'localhost', port: 3000 },
     { host: 'localhost', port: 3000 }, 
     { host: 'localhost', port: 3002 }
   ]
@@ -53,14 +53,17 @@ server2.listen(3001);
 //
 // create server 3.
 //
-var opts2 = { 
-  peers: [
-    { host: 'localhost', port: 3000 }, 
-    { host: 'localhost', port: 3001 }
-  ]
-};
+var r3peers = [
+  { host: 'localhost', port: 3000 }, 
+  { host: 'localhost', port: 3001 }
+];
 
-var r3 = rs.createServer(db3, opts2);
+var r3 = rs.createServer(db3);
+
+r3peers.forEach(function(peer) {
+  r3.addPeer(peer);
+})
+
 var server3 = net.createServer(function(con) {
   r3.pipe(con).pipe(r3);
 });

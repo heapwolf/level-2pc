@@ -13,6 +13,7 @@ function Server(localdb, opts) {
   var put = localdb.put;
 
   opts = opts || {};
+  opts.peers = opts.peers || [];
   var methods = {};
 
   methods.quorum = function (key, value, type, cb) {
