@@ -133,7 +133,7 @@ function Server(localdb, opts) {
 
   localdb.hooks.pre({ start: prefix + '~' }, function (op, done) {
 
-    localdb.put(prefix + op.key, op.value, function (err) {
+    localdb[op.type](prefix + op.key, op.value, function (err) {
       if (err) return done(err);
 
       getQuorum(op.key, op.value, op.type, function(err) {
