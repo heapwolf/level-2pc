@@ -32,7 +32,7 @@ function Server(localdb, config) {
     if (key.indexOf(ttlk) == 0)
       return del.apply(localdb, arguments);
 
-    del(prefix + key, function(err) {
+    db.del(prefix + key, function(err) {
       var op = { type: 'del', key: key };
       replicate(op, cb);
     });

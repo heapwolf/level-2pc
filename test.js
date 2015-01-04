@@ -231,6 +231,22 @@ test('more than two peers', function(t) {
   });
 
 
+
+  test('delete a record and ensure that the delete is replicated', function(t) {
+    
+    db1.del('test1key', function(err) {
+      t.ok(!err, 'key added to the coordinator and all other peers');
+      db2.get('test1key', function(err) {
+        t.ok(err, 'key was not found in db2');
+        db2.get('test1key', function(err) {
+          t.ok(err, 'key was not found in db3');
+          t.end();
+        });
+      });
+    });
+  });
+
+
   test('teardown', function(t) {
     db1.close();
     db2.close();
