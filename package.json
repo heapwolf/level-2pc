@@ -1,6 +1,6 @@
 {
   "name": "level-2pc",
-  "version": "2.2.4",
+  "version": "2.3.4",
   "description": "A two-phase-commit protocol for leveldb.",
   "main": "index.js",
   "scripts": {
@@ -21,7 +21,6 @@
   "license": "MIT",
   "dependencies": {
     "debug": "^2.1.1",
-    "level-hooks": "git://github.com/dominictarr/level-hooks.git#async2",
     "level-hyper": "^0.18.0",
     "level-key": "^1.0.0",
     "level-ttl": "^2.1.1",
@@ -29,6 +28,7 @@
     "rpc-stream": "git://github.com/hij1nx/rpc-stream.git"
   },
   "devDependencies": {
-    "rimraf": "^2.2.8"
+    "rimraf": "^2.2.8",
+    "tap": "^0.4.13"
   }
 }

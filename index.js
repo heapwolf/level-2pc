@@ -1,102 +1,181 @@
 var rpc = require('rpc-stream');
 var createClient = require('./client');
-var Hooks = require('level-hooks');
 var net = require('net');
 var ttl = require('level-ttl');
-var log = require('debug')('level2pc');
+var debug = require('debug')('level2pc');
 
-var prefix = '!!!';
+var prefix = '\xffxxl\xff';
+var ttlk = '\xffttl\xff';
 var HR1 = { ttl: 1000 * 60 * 60 };
 
-function Server(localdb, opts) {
+function Server(localdb, config) {
+ 
+  config = config || {};
+  ttl(localdb);
 
-  var batch = localdb.batch;
-  var put = localdb.put;
+  var db = {
+    batch: localdb.batch.bind(localdb),
+    put: localdb.put.bind(localdb),
+    del: localdb.del.bind(localdb)
+  };
 
-  opts = opts || {};
-  opts.peers = opts.peers || [];
+  function prefixOps(arr) {
+    var ops = [];
+    arr.map(function(op) {
+      ops.push({ key: prefix + op.key, value: op.value, type: op.type });
+    });
+    return ops;
+  }
+
+  localdb.del = function(key, cb) {
+
+    if (key.indexOf(ttlk) == 0)
+      return del.apply(localdb, arguments);
+
+    del(prefix + key, function(err) {
+      var op = { type: 'del', key: key };
+      replicate(op, cb);
+    });
+  };
+
+  localdb.put = function(key, val, opts, cb) {
+
+    if ('function' == typeof val) {
+      throw new TypeError('Put expects a value not a function');
+    }
+
+    if ('function' == typeof opts) {
+      cb = opts;
+      opts = {};
+    }
+
+    db.put(prefix + key, val, opts, function(err) {
+      var op = { type: 'put', key: key, value: val, opts: opts };
+      replicate(op, cb);
+    });
+  };
+
+  localdb.batch = function(arr, opts, cb) {
+    if (arr[0] && arr[0].key.indexOf(ttlk) == 0)
+      return db.batch.apply(localdb, arguments);
+
+    if ('function' == typeof opts) {
+      cb = opts;
+      opts = {};
+    }
+
+    db.batch(prefixOps(arr), opts, function(err) {
+      var op = { type: 'batch', value: arr };
+      replicate(op, cb);
+    });
+  };
+
+  config.peers = config.peers || [];
   var methods = {};
 
-  methods.quorum = function (key, value, type, cb) {
-    log('quorum phase:', key, value, type);
-    put.call(localdb, prefix + key, type, HR1, cb);
+  methods.quorum = function (op, cb) {
+    debug('QUORUM PHASE @', config.host, config.port)
+    
+    if (op.type == 'batch') {
+      db.batch(prefixOps(op.value), op.opts, cb);
+    }
+    else if (op.type == 'put') {
+      db.put(prefix + op.key, op.value, op.opts, cb);
+    }
+    else if (op.type == 'del') {
+      db.del(prefix + op.key, cb);
+    }
   };
   
-  methods.commit = function (key, value, type, cb) {
-    log('commit phase:', key, value, type);
-    batch.call(
-      localdb,
-      [
-        { type: 'del', key: prefix + key },
-        { type: type, key: key, value: value }
-      ],
-      cb
-    );
+  methods.commit = function (op, cb) {
+    debug('COMMIT PHASE @', config.host, config.port)
+
+    if (op.type == 'batch') {
+      op.value.forEach(function(o) {
+        op.value.push({ type: 'del', key: prefix + o.key })
+      });
+    }
+    else {
+      op.value = [
+        { type: 'del', key: prefix + op.key },
+        { type: op.type, key: op.key, value: op.value }
+      ];
+    }
+
+    op.opts = op.opts || { ttl: config.ttl };
+
+    db.batch(op.value, op.opts, cb);
   }; 
 
   var server = rpc(methods);
   var connections = {};
+  var clients = [];
   var loaded;
 
+  function connectionError(host, port) {
+    return new Error('Connection failed to ' + host + ':' + port);
+  }
+
   server.addPeer = function(peer) {
-    
-    if (loaded && opts.peers.some(function(p) {
+
+    if (loaded && config.peers.some(function(p) {
       var host = p.host == peer.host;
       var port = p.port == peer.port;
       return host && port;
     })) return;
 
-    log('adding peer: %s:%s', peer.host, peer.port);
-
-    client = createClient(opts);
+    client = createClient(config);
     client.connect(peer.port, peer.host);
     client.on('error', function(err) {
       server.emit('error', err);
     });
 
+    client.on('fail', function() {
+      server.emit('error', connectionError(peer.host, peer.port));
+    });
+
     client.on('connect', function(s) {
-      log('connected: %s:%s', peer.host, peer.port);
       var r = rpc();
       remote = r.wrap(methods);
       connections[peer.port + peer.host] = r.wrap(methods);
       r.pipe(s).pipe(r);
-      
-      if (opts.peers.indexOf(peer) == -1) {
-        opts.peers.push(peer);
-      }
     });
+
+    if (config.peers.indexOf(peer) == -1) {
+      config.peers.push(peer);
+    }
+
+    clients.push(client);
   };
 
-  opts.peers.forEach(server.addPeer);
+  config.peers.forEach(server.addPeer);
   loaded = true;
 
-  Hooks(ttl(localdb));
-
-  function getQuorum(key, value, type, done) {
+  function getQuorum(op, cb) {
 
     var phase = 'quorum';
     var index = 0;
 
-    !function connect() {
-      opts.peers.map(function(peer) {
+    !function next() {
+      config.peers.map(function(peer) {
+        debug('COORDINATING PEER @', config.host, config.port, peer)
 
         var remote = connections[peer.port + peer.host];
-       
+      
         function write() {
-          remote[phase](key, value, type, function(err) {
-            log('completed: %s phase', phase);
+          remote[phase](op, function(err) {
             if (err) {
-              return done(err);
+              return cb(err);
             }
 
-            if (++index == opts.peers.length) {
+            if (++index == config.peers.length) {
               if (phase != 'quorum') {
-                return done();
+                return cb();
               }
 
               phase = 'commit';
               index = 0;
-              connect();
+              next();
             }
           });
         }
@@ -106,43 +185,45 @@ function Server(localdb, opts) {
         }
 
         var retrycount = 0;
-        var err = new Error('Connection Fail %s:%s', peer.host, peer.port);
 
-        var retry = setInterval(function() {
-          
-          log('waiting for %s:%s', peer.host, peer.port);
-
+        function tryRemote() {
           remote = connections[peer.port + peer.host];
 
-          if (++retrycount == opts.failAfter * 1e3) {
+          if (remote) {
             clearInterval(retry);
-            return done(err);
+            return write();
           }
 
-          if (!remote) {
-            return;
+          if (++retrycount == config.failAfter) {
+            clearInterval(retry);
+            cb(connectionError(peer.host, peer.port));
+            return cb = function() {};
           }
+        }
 
-          clearInterval(retry);
-          write();
-        }, 100);
+        var retry = setInterval(tryRemote, 10);
+        tryRemote();
 
       });
     }();
   }
 
-  localdb.hooks.pre({ start: prefix + '~' }, function (op, done) {
-
-    localdb[op.type](prefix + op.key, op.value, function (err) {
-      if (err) return done(err);
-
-      getQuorum(op.key, op.value, op.type, function(err) {
-        if (err) return done(err);
-        methods.commit(op.key, op.value || '', op.type, done);
-        log('completed write for %s', op.key);
-      });
+  function replicate(op, cb) {
+    debug('REPLICATION EVENT @', config.host, config.port)
+    getQuorum(op, function(err) {
+      if (err) return cb(err);
+      methods.commit(op, cb);
     });
-  });
+  }
+
+  var close = localdb.close;
+
+  localdb.close = function() {
+    clients.map(function(client) {
+      client.disconnect();
+    });
+    close();
+  };
 
   return server;
 }

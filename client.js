@@ -1,11 +1,13 @@
 var inject = require('reconnect-core');
 
-module.exports = function (methods, transport) {
+module.exports = function (opts, transport) {
+
+  opts = opts || { failAfter: 10 };
 
   var reconnect = inject(transport || function() {
     return require('net').connect.apply(null, arguments);
   });
 
-  return reconnect({ failAfter: 10 });
+  return reconnect(opts);
 };
 
