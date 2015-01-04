@@ -1,6 +1,6 @@
 {
   "name": "level-2pc",
-  "version": "2.3.4",
+  "version": "3.0.0",
   "description": "A two-phase-commit protocol for leveldb.",
   "main": "index.js",
   "scripts": {
