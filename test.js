@@ -1,7 +1,6 @@
 var level = require('level-hyper');
 var net = require('net');
 var rs = require('./index');
-var assert = require('assert');
 var rmrf = require('rimraf');
 var tap = require('tap');
 var test = tap.test;
@@ -102,17 +101,14 @@ test('more than two peers', function(t) {
   });
 
 
-  test('that 2 records put to one peer are replicated to all other peers', function(t) {
+  test('that a random number of records put to one peer are replicated to all other peers', function(t) {
 
-    //
-    // do 5000 puts.
-    //
-    var records = createData('A_', 2);
+    var records = createData('A_', Math.floor(Math.random()*100));
 
     records.forEach(function(record, index) {
 
       db1.put(record.key, record.value, function(err) {
-        assert.ok(!err);
+        t.ok(!err);
 
         //
         // after the last record is put, all records should be in the database.
@@ -126,13 +122,17 @@ test('more than two peers', function(t) {
     function verifyRecords(db, index) {
 
       var results = [];
+      var count = 0;
+
       db.createReadStream({ gte: 'A_', lte: 'A_~' })
         .on('data', function(r) {
+          ++count;
           results.push(r);
         })
         .on('end', function() {
-          assert.ok(
-            JSON.stringify(results) == JSON.stringify(records)
+          t.equal(count, records.length)
+          t.equal(
+            JSON.stringify(results), JSON.stringify(records)
           );
           if (index == 1) return t.end(); 
         });
@@ -160,7 +160,7 @@ test('more than two peers', function(t) {
       });
 
       db1.batch(newgroup, function(err) {
-        assert.ok(!err);
+        t.ok(!err);
         if (index == groups.length-1) {
           [db2, db3].forEach(verifyRecords);
         }
@@ -184,7 +184,7 @@ test('more than two peers', function(t) {
   });
 
 
-  test('try to replicate with servers that can never be reached', function(t) {
+  test('replicating with servers that can never be reached', function(t) {
 
     //
     // create server 3 by adding the peers ad-hoc.
@@ -232,7 +232,7 @@ test('more than two peers', function(t) {
 
 
 
-  test('delete a record and ensure that the delete is replicated', function(t) {
+  test('that a record can be deleted from one database and it is removed from all others', function(t) {
     
     db1.del('test1key', function(err) {
       t.ok(!err, 'key added to the coordinator and all other peers');
