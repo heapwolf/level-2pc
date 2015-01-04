@@ -222,7 +222,7 @@ function Server(localdb, config) {
     clients.map(function(client) {
       client.disconnect();
     });
-    close();
+    close.apply(localdb, arguments);
   };
 
   return server;
