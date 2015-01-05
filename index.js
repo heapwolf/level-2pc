@@ -337,6 +337,8 @@ function Server(localdb, config) {
   function syncRemotePeer(peer) {
     debug('SYNC PEER EVENT @', local_peer)
 
+    var remote_peer = connections[peer.port+peer.host];
+    
     var ops = [];
     localdb.createReadStream({
       gte: prefixPeer(peer),
@@ -349,7 +351,7 @@ function Server(localdb, config) {
       if (ops.length == 0) return;
       
       var op = { type: 'batch', value: ops };
-      remote['commit'](op, peer, function(err) {
+      remote_peer['commit'](op, peer, function(err) {
         if (err) return debug('SYNC PEER ERROR @', err);
         
         confirmPeers(op, [peer], function(err) {
