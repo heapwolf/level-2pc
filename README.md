@@ -20,6 +20,16 @@ The algorithm for how this works is [`here`](/SPEC.md).
 There are trade-offs to every type of replication. I will
 try to create some specific numbers for you soon.
 
+# REPLICATION METHODS
+
+## SYNCHRONOUS REPLICATION (SYNC)
+
+Write is not considered complete until all peers have acknowledged the write. Strong Consistency. Unfortunately in this mode, if a single peer goes down, then replication will not take place across the remaining peers. 
+
+## SEMI-SYNCHRONOUS REPLICATION (SEMISYNC) (DEFAULT)
+
+The write is considered complete as soon as all connected and alive peers confirm the write. In this mode, if a peer goes down, it is removed from the peers required to acknowledge the write. This still provides strong consistency for all the connected peers, but better fault tolerance and flexibility for adding new peers and for peers going down for maintainance or network distruptions.
+
 # USAGE
 
 ## EXAMPLE

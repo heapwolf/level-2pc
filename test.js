@@ -41,9 +41,9 @@ function createData(prefix, size) {
 
 test('more than two peers', function(t) {
 
-  var db1, db2, db3, db4;
-  var r1, r2, r3, r4;
-  var server1, server2, server3, server4;
+  var db1, db2, db3, db4, d5;
+  var r1, r2, r3, r4, r5;
+  var server1, server2, server3, server4, server5;
 
 
   //
@@ -55,10 +55,12 @@ test('more than two peers', function(t) {
     rmrf.sync('./db2');
     rmrf.sync('./db3');
     rmrf.sync('./db4');
+    rmrf.sync('./db5');
     db1 = level('./db1', { valueEncoding: 'json' });
     db2 = level('./db2', { valueEncoding: 'json' });
     db3 = level('./db3', { valueEncoding: 'json' });
     db4 = level('./db4', { valueEncoding: 'json' });
+    db5 = level('./db5', { valueEncoding: 'json' });
 
     //
     // create server 1.
@@ -261,6 +263,54 @@ test('more than two peers', function(t) {
     });
   });
 
+/*
+  test('that a random number of records put to one peer are replicated to new peers', function(t) {
+
+    var records = createData('C_', Math.floor(Math.random()*100));
+
+    records.forEach(function(record, index) {
+
+      db1.put(record.key, record.value, function(err) {
+        t.ok(!err);
+
+        //
+        // after the last record is put, all records should be in the database.
+        //
+        if (index == records.length - 1) {
+          verifyReplication();
+        }
+      });
+    });
+
+    function verifyReplication() {
+      r5 = rs.createServer(db5, createOpts(3004, 3000, 3001, 3002, 3003));
+
+      server5 = net.createServer(function(con) {
+        r5.pipe(con).pipe(r5);
+      });
+
+      server5.listen(3004);
+
+      setTimeout(function() {
+        var results = [];
+        var count = 0;
+
+        db5.createReadStream({ gte: 'C_', lte: 'C_~' })
+          .on('data', function(r) {
+            ++count;
+            results.push(r);
+          })
+          .on('end', function() {
+            t.equal(count, records.length)
+            t.equal(
+              JSON.stringify(results), JSON.stringify(records)
+            );
+            t.end();
+          });
+      }, 2500)
+    }
+  });
+*/
 
   test('teardown', function(t) {
     server1.close();

@@ -8,14 +8,12 @@ var lodash = require('lodash');
 var prefix = '\xffxxl\xff';
 var ttlk = '\xffttl\xff';
 var HR1 = { ttl: 1000 * 60 * 60 };
-var local_peer = {};
+var local_peer = {host: 'localhost', port: 65356};
 
 function Server(localdb, config) {
 
-  config = lodash.merge({mode: 'all'}, config);
+  config = lodash.merge({mode: 'semisync'}, config);
   ttl(localdb);
-
-  local_peer = {host: config.host, port: config.port};
 
   var db = {
     batch: localdb.batch.bind(localdb),
@@ -170,10 +168,9 @@ function Server(localdb, config) {
       connections[peer.port + peer.host] = r.wrap(methods);
       r.pipe(s).pipe(r);
 
-      syncPeer(peer);
+      syncRemotePeer(peer);
 
       connected_peers.push(peer);
-      
     });
 
     client.on('disconnect', function() {
@@ -191,8 +188,10 @@ function Server(localdb, config) {
     }
   };
 
+
   config.peers.forEach(server.addPeer);
   loaded = true;
+  
 
   function replicatePeers(op, cb) {
     debug('CONNECTED PEERS @', connected_peers);
@@ -277,7 +276,7 @@ function Server(localdb, config) {
     db.batch(ops, cb);
   }
   
-  function syncPeer(peer) {
+  function syncRemotePeer(peer) {
     debug('SYNC PEER EVENT @', local_peer)
 
     var ops = [];
@@ -286,7 +285,6 @@ function Server(localdb, config) {
       lte: prefixPeer(peer) + '~'
     })
     .on('data', function(data) {
-      debug('SYNC PEER DATA @', data);
       ops.push({type: 'put', key: data.key.replace(prefixPeer(peer), ''), value: data.value});
     })
     .on('end', function() {
@@ -295,7 +293,6 @@ function Server(localdb, config) {
       var remote = connections[peer.port + peer.host];
       
       var op = { type: 'batch', value: ops };
-      debug('SYNC PEER OP @', op );
       remote['commit'](op, peer, function(err) {
         if (err) return debug('SYNC PEER ERROR @', err);
         
