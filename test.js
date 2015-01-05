@@ -63,7 +63,7 @@ test('more than two peers', function(t) {
     //
     // create server 1.
     //
-    r1 = rs.createServer(db1, createOpts(3000, 3001, 3002));
+    r1 = rs.createServer(db1, createOpts(3000, 3001, 3002, 3003));
     server1 = net.createServer(function(con) {
       r1.pipe(con).pipe(r1);
     });
@@ -73,7 +73,7 @@ test('more than two peers', function(t) {
     //
     // create server 2 with one accidentally duplicate peer.
     //
-    r2 = rs.createServer(db2, createOpts(3001, 3000, 3002));
+    r2 = rs.createServer(db2, createOpts(3001, 3000, 3002, 3003));
     server2 = net.createServer(function(con) {
       r2.pipe(con).pipe(r2);
     });
@@ -83,27 +83,36 @@ test('more than two peers', function(t) {
     //
     // create server 3 by adding the peers ad-hoc.
     //
+    /*
     r3 = rs.createServer(db3, { port: 3002, host: 'localhost' });
 
     [
       { host: 'localhost', port: 3000 }, 
-      { host: 'localhost', port: 3001 }
+      { host: 'localhost', port: 3001 },
+      { host: 'localhost', port: 3003 }
     ].forEach(function(peer) {
       r3.addPeer(peer);
     });
+    */
+    r3 = rs.createServer(db3, createOpts(3002, 3000, 3001, 3003));
 
     server3 = net.createServer(function(con) {
       r3.pipe(con).pipe(r3);
     });
 
     server3.listen(3002);
-    t.end();
+    
+    // Give the peers a few milliseconds to come online
+    setTimeout(function() {
+      t.end();
+    }, 500);
   });
 
 
   test('that a random number of records put to one peer are replicated to all other peers', function(t) {
 
     var records = createData('A_', Math.floor(Math.random()*100));
+    //var records = createData('A_', 1);
 
     records.forEach(function(record, index) {
 
@@ -114,7 +123,7 @@ test('more than two peers', function(t) {
         // after the last record is put, all records should be in the database.
         //
         if (index == records.length - 1) {
-          [db2, db3].forEach(verifyRecords);
+          [db2, db3].forEach(verifyRecords);          
         }
       });
     });
@@ -184,45 +193,13 @@ test('more than two peers', function(t) {
   });
 
 
-  test('replicating with servers that can never be reached', function(t) {
-
-    //
-    // create server 3 by adding the peers ad-hoc.
-    //
-    r4 = rs.createServer(db4, { port: 3004, host: 'localhost', failAfter: 200 });
-
-    [
-      { host: 'localhost', port: 3999 }, 
-      { host: 'localhost', port: 3998 }
-    ].forEach(function(peer) {
-      r4.addPeer(peer);
-    });
-
-    server4 = net.createServer(function(con) {
-      r4.pipe(con).pipe(r4);
-    });
-
-    server4.listen(3004);
-
-    //
-    // fail when quorum can't be reached?
-    //
-    db4.put('test1key', 'test1value', function(err) {
-      t.equal(err.message, 'Connection failed to localhost:3999', 'Callback should get an error');
-      server4.close();
-      db4.close();
-      t.end();
-    });
-  });
-
-
   test('that a single record is added to all peers before returning the callback', function(t) {
     
     db1.put('test1key', 'test1value', function(err) {
       t.ok(!err, 'key added to the coordinator and all other peers');
       db2.get('test1key', function(err) {
         t.ok(!err, 'key was found in db2');
-        db2.get('test1key', function(err) {
+        db3.get('test1key', function(err) {
           t.ok(!err, 'key was found in db3');
           t.end();
         });
@@ -238,7 +215,7 @@ test('more than two peers', function(t) {
       t.ok(!err, 'key added to the coordinator and all other peers');
       db2.get('test1key', function(err) {
         t.ok(err, 'key was not found in db2');
-        db2.get('test1key', function(err) {
+        db3.get('test1key', function(err) {
           t.ok(err, 'key was not found in db3');
           t.end();
         });
@@ -246,14 +223,52 @@ test('more than two peers', function(t) {
     });
   });
 
+  test('that a single record is added to all connected peers and queued for down peers', function(t) {
+    
+    db1.put('test1key', 'test1value', function(err) {
+      t.ok(!err, 'key added to the coordinator and all other peers');
+      db2.get('test1key', function(err) {
+        t.ok(!err, 'key was found in db2');
+        db3.get('test1key', function(err) {
+          t.ok(!err, 'key was found in db3');
+          db1.get('\xffxxl\xff3003localhost\xfftest1key', function(err) {
+            t.ok(!err, 'replication key found in db1');
+            
+            r4 = rs.createServer(db4, createOpts(3003, 3000, 3001, 3002));
+
+            server4 = net.createServer(function(con) {
+              r4.pipe(con).pipe(r4);
+            });
+
+            server4.listen(3003);
+            
+            // Allow for Peer Sync
+            setTimeout(function() {
+              db4.get('test1key', function(err) {
+                t.ok(!err, 'key was found in db4')
+                db1.get('\xffxxl\xff3003localhost\xfftest1key', function(err) {
+                  t.ok(err, 'replication key not found in db1');
+                  t.end();
+
+                  server4.close();
+                  db4.close();
+                })
+              });
+            }, 250);
+          })
+        });
+      });
+    });
+  });
+
 
   test('teardown', function(t) {
-    db1.close();
-    db2.close();
-    db3.close();
     server1.close();
     server2.close();
     server3.close();
+    db1.close();
+    db2.close();
+    db3.close();
     t.end();
   });
 
