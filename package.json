@@ -25,7 +25,7 @@
     "level-key": "^1.0.0",
     "level-ttl": "^2.1.1",
     "reconnect-core": "^0.2.1",
-    "rpc-stream": "git://github.com/hij1nx/rpc-stream.git",
+    "rpc-stream": "~2.1.1",
     "lodash": "~2.4.1"
   },
   "devDependencies": {
