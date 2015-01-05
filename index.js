@@ -3,18 +3,19 @@ var createClient = require('./client');
 var net = require('net');
 var ttl = require('level-ttl');
 var debug = require('debug')('level2pc');
+var lodash = require('lodash');
 
 var prefix = '\xffxxl\xff';
 var ttlk = '\xffttl\xff';
 var HR1 = { ttl: 1000 * 60 * 60 };
-var local = {}
+var local_peer = {};
 
 function Server(localdb, config) {
 
-  config = config || {};
+  config = lodash.merge({mode: 'all'}, config);
   ttl(localdb);
 
-  local = {host: config.host, port: config.port};
+  local_peer = {host: config.host, port: config.port};
 
   var db = {
     batch: localdb.batch.bind(localdb),
@@ -25,18 +26,18 @@ function Server(localdb, config) {
   function prefixOps(arr, prefix_peers) {
     var ops = [];
     arr.map(function(op) {
-      ops.push({ key: prefix + peerId(local) + '\xff' + op.key, value: op.value, type: op.type });
+      ops.push({ key: prefixPeer(local_peer) + op.key, value: op.value, type: op.type });
       if (prefix_peers) {
         config.peers.map(function(peer) {
-          ops.push({ key: prefix + peerId(peer) + '\xff' + op.key, value: op.value, type: op.type })
+          ops.push({ key: prefixPeer(peer) + op.key, value: op.value, type: op.type })
         })
       }
     });
     return ops;
   }
   
-  function peerId(peer) {
-    return peer.port + peer.host;
+  function prefixPeer(peer) {
+    return prefix + peer.port + peer.host + '\xff';
   }
 
   localdb.del = function(key, cb) {
@@ -44,9 +45,9 @@ function Server(localdb, config) {
     if (key.indexOf(ttlk) == 0)
       return del.apply(localdb, arguments);
 
-    var ops = [{ type: 'del', key: prefix + peerId(local) + '\xff' + key }];
+    var ops = [{ type: 'del', key: prefixPeer(local_peer) + key }];
     config.peers.forEach(function(peer) {
-      ops.push({ type: 'del', key: prefix + peerId(peer) + '\xff' + key })
+      ops.push({ type: 'del', key: prefixPeer(peer) + key })
     });
 
     db.batch(ops, function(err) {
@@ -67,23 +68,16 @@ function Server(localdb, config) {
       opts = {};
     }
 
-    var ops = [{ type: 'put', key: prefix + peerId(local) + '\xff' + key, value: val, opts: opts }];  
+    var ops = [{ type: 'put', key: prefixPeer(local_peer) + key, value: val, opts: opts }];  
     config.peers.forEach(function(peer) {
-      ops.push({ type: 'put', key: prefix + peerId(peer) + '\xff' + key, value: val, opts: opts });
+      ops.push({ type: 'put', key: prefixPeer(peer) + key, value: val, opts: opts });
     });
 
     db.batch(ops, function(err) {
       if (err) return cb(err);
       var op = { type: 'put', key: key, value: val, opts: opts };
       replicate(op, cb);
-    })
-    
-    /*
-    db.put(prefix + key, val, opts, function(err) {
-      var op = { type: 'put', key: key, value: val, opts: opts };
-      replicate(op, cb);
     });
-    */
   };
 
   localdb.batch = function(arr, opts, cb) {
@@ -111,10 +105,10 @@ function Server(localdb, config) {
       db.batch(prefixOps(op.value, false), op.opts, cb);
     }
     else if (op.type == 'put') {
-      db.put(prefix + peerId(peer) + '\xff' + op.key, op.value, op.opts, cb);
+      db.put(prefixPeer(peer) + op.key, op.value, op.opts, cb);
     }
     else if (op.type == 'del') {
-      db.del(prefix + peerId(peer) + '\xff' + op.key, cb);
+      db.del(prefixPeer(peer) + op.key, cb);
     }
   };
   
@@ -123,17 +117,17 @@ function Server(localdb, config) {
 
     if (op.type == 'batch') {
       op.value.forEach(function(o) {
-        op.value.push({ type: 'del', key: prefix + peerId(local) + '\xff' + o.key })
+        op.value.push({ type: 'del', key: prefixPeer(local_peer) + o.key })
       });
     }
     else {
       op.value = [
-        { type: 'del', key: prefix + peerId(local) + '\xff' + op.key },
+        { type: 'del', key: prefixPeer(local_peer) + op.key },
         { type: op.type, key: op.key, value: op.value }
       ];
     }
 
-    op.value.push({ type: 'del', key: prefix + peerId(peer) + '\xff' + op.key })
+    op.value.push({ type: 'del', key: prefixPeer(peer) + op.key })
 
     op.opts = op.opts || { ttl: config.ttl };
 
@@ -272,11 +266,11 @@ function Server(localdb, config) {
     peers.map(function(peer) {
       if (op.type == 'batch') {
         op.value.forEach(function(o) {
-          ops.push({ type: 'del', key: prefix + peerId(peer) + '\xff' + o.key })
+          ops.push({ type: 'del', key: prefixPeer(peer) + o.key })
         });
       }
       else {
-        ops.push({ type: 'del', key: prefix + peerId(peer) + '\xff' + op.key });
+        ops.push({ type: 'del', key: prefixPeer(peer) + op.key });
       }
     });
 
@@ -284,16 +278,16 @@ function Server(localdb, config) {
   }
   
   function syncPeer(peer) {
-    debug('SYNC PEER EVENT @', local)
+    debug('SYNC PEER EVENT @', local_peer)
 
     var ops = [];
     localdb.createReadStream({
-      gte: prefix + peerId(peer) + '\xff',
-      lte: prefix + peerId(peer) + '\xff~'
+      gte: prefixPeer(peer),
+      lte: prefixPeer(peer) + '~'
     })
     .on('data', function(data) {
       debug('SYNC PEER DATA @', data);
-      ops.push({type: 'put', key: data.key.replace(prefix + peerId(peer) + '\xff', ''), value: data.value});
+      ops.push({type: 'put', key: data.key.replace(prefixPeer(peer), ''), value: data.value});
     })
     .on('end', function() {
       if (ops.length == 0) return;
@@ -316,7 +310,7 @@ function Server(localdb, config) {
     debug('REPLICATION EVENT @', config.host, config.port)
     replicatePeers(op, function(err, peers) {
       if (err) return cb(err);
-      methods.commit(op, local, function(err) {
+      methods.commit(op, local_peer, function(err) {
         if (err) return cb(err);
         confirmPeers(op, peers, cb);
       });
