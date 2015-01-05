@@ -174,11 +174,10 @@ function Server(localdb, config) {
     });
 
     client.on('disconnect', function() {
-      if (connected_peers.indexOf(peer) == 1)
+      if (connected_peers.indexOf(peer) == 1) {
         debug('PEER DISCONNECTED @', peer);
-
-      if (connected_peers.indexOf(peer) != -1)
         connected_peers.splice(connected_peers.indexOf(peer), 1)
+      }
     });
 
     clients.push(client);
