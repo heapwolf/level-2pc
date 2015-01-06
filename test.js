@@ -171,7 +171,7 @@ test('more than two peers', function(t) {
     //
     // do 5000 puts.
     //
-    var size = 1;
+    var size = 1000;
     var records = createData('B_', size);
     var groups = chunk(records, 2);
 
@@ -186,7 +186,7 @@ test('more than two peers', function(t) {
         if (index == groups.length-1) {
           setTimeout(function() {
             [db2, db3].forEach(verifyRecords);
-          }, 1000);
+          }, 3 * size);
         }
       });
     });
@@ -276,7 +276,8 @@ test('more than two peers', function(t) {
 
   test('that a random number of records put to one peer are replicated to new peers', function(t) {
 
-    var records = createData('C_', Math.floor(Math.random()*100));
+    var size =  Math.floor(Math.random()*100);
+    var records = createData('C_', size);
 
     records.forEach(function(record, index) {
 
@@ -302,21 +303,23 @@ test('more than two peers', function(t) {
       server5.listen(3004);
       
       r5.on('ready', function() {
-        var results = [];
-        var count = 0;
-        db5.createReadStream({ gte: 'C_', lte: 'C_~' })
-          .on('data', function(r) {
-            ++count;
-            results.push(r);
-          })
-          .on('end', function() {
-            t.equal(count, records.length)
-            t.equal(
-              JSON.stringify(results), JSON.stringify(records)
-            );
-            server5.close();
-            t.end();
-          });
+        setTimeout(function() {
+          var results = [];
+          var count = 0;
+          db5.createReadStream({ gte: 'C_', lte: 'C_~' })
+            .on('data', function(r) {
+              ++count;
+              results.push(r);
+            })
+            .on('end', function() {
+              t.equal(count, records.length)
+              t.equal(
+                JSON.stringify(results), JSON.stringify(records)
+              );
+              server5.close();
+              t.end();
+            });          
+        }, 10 * size)
       })
     }
   });
