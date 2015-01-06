@@ -2,8 +2,7 @@ var rpc = require('rpc-stream');
 var createClient = require('./client');
 var net = require('net');
 var ttl = require('level-ttl');
-var _ = require('lodash');
-var async = require('async');
+var xtend = require('xtend');
 
 var prefix = '\xffxxl\xff';
 var ttlk = '\xffttl\xff';
@@ -13,7 +12,7 @@ function Server(localdb, config) {
 
   ttl(localdb);
 
-  var config = _.merge({mode: 'semisync'}, config);
+  var config = xtend({mode: 'semisync'}, config);
   config.name = (config.port+config.host).toUpperCase();
 
   var debug = require('debug')('level2pc:' + config.name);
@@ -26,6 +25,14 @@ function Server(localdb, config) {
     put: localdb.put.bind(localdb),
     del: localdb.del.bind(localdb)
   };
+
+  function containsPeer(peers, peer) {
+    return peers.some(function(p) {
+      var host = p.host == peer.host;
+      var port = p.port == peer.port;
+      return host && port;
+    })
+  }
 
   function prefixOps(arr, prefix_peers) {
     var ops = [];
@@ -141,14 +148,14 @@ function Server(localdb, config) {
   
   methods.ready = function(peer, cb) {
     debug('REMOTE PEER READY @', peer);
-    if (_.some(ready_peers, peer) == false) {
+    if (containsPeer(ready_peers, peer) == false) {
       ready_peers.push(peer); 
     }
     cb();
   };
 
   methods.announce = function(peer, cb) {
-    if (_.some(config.peers, peer) == false) {
+    if (containsPeer(config.peers, peer) == false) {
       debug('REMOTE ADDING PEER @@@@@', peer);
       addPeer(peer);
       cb();
@@ -159,7 +166,7 @@ function Server(localdb, config) {
     debug('REMOTE PEER SYNC @', sync_peer.host, sync_peer.port);
 
     var syncInterval = setInterval(function() {
-      if (isConnectedPeer(sync_peer) == false) return;
+      if (containsPeer(connected_peers, sync_peer) == false) return;
       
       clearInterval(syncInterval);
       
@@ -188,13 +195,6 @@ function Server(localdb, config) {
   var loaded;
   var ready;
 
-  function isConnectedPeer(peer) {
-    return connected_peers.some(function(p) {
-      var host = p.host == peer.host;
-      var port = p.port == peer.port;
-      return host && port;
-    })
-  }
 
   function connectionError(host, port) {
     return new Error('Connection failed to ' + host + ':' + port);
@@ -221,7 +221,8 @@ function Server(localdb, config) {
     client.on('connect', function(s) {
       debug('PEER CONNECTED @', peer);
       var r = rpc();
-      connections[peer.port + peer.host] = r.wrap(methods);
+      r_remote = r.wrap(methods);
+      connections[peer.port + peer.host] = r_remote;
       r.pipe(s).pipe(r);
 
       syncRemotePeer(peer);
@@ -230,8 +231,8 @@ function Server(localdb, config) {
       
       server.emit('peerConnected', peer);
 
-      connections[peer.port + peer.host]['announce'](local_peer, function() {});
-      connections[peer.port + peer.host]['ready'](local_peer, function() {});
+      r_remote['announce'](local_peer, function() {});
+      r_remote['ready'](local_peer, function() {});
     });
 
     client.on('disconnect', function() {
