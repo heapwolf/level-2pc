@@ -273,7 +273,7 @@ test('more than two peers', function(t) {
     });
   });
 
-/*
+
   test('that a random number of records put to one peer are replicated to new peers', function(t) {
 
     var records = createData('C_', Math.floor(Math.random()*100));
@@ -293,11 +293,7 @@ test('more than two peers', function(t) {
     });
 
     function verifyReplication() {
-      r1.addPeer({host: 'localhost', port: 3004})
-      r2.addPeer({host: 'localhost', port: 3004})
-      r3.addPeer({host: 'localhost', port: 3004})
-      r4.addPeer({host: 'localhost', port: 3004})
-      r5 = rs.createServer(db5, createOpts(3004, 3000, 3001, 3002, 3003));
+      r5 = rs.createServer(db5, createOpts(3004, 3000, 3001, 3002));
 
       server5 = net.createServer(function(con) {
         r5.pipe(con).pipe(r5);
@@ -312,10 +308,8 @@ test('more than two peers', function(t) {
           .on('data', function(r) {
             ++count;
             results.push(r);
-            console.log('data');
           })
           .on('end', function() {
-            console.log('end');
             t.equal(count, records.length)
             t.equal(
               JSON.stringify(results), JSON.stringify(records)
@@ -326,7 +320,6 @@ test('more than two peers', function(t) {
       })
     }
   });
-*/
   
   test('teardown', function(t) {
     server1.close();
