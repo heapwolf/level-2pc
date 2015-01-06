@@ -15,6 +15,8 @@ server1 = net.createServer(function(con) {
 server1.listen(3002);
 
 setTimeout(function() {
-  db8.put(Math.random().toString(15).slice(-256), Math.random().toString(15).slice(-256), function(err) {
-  });
-}, 5000)
+  for (var i=0; i<5; i++) {
+    db8.put('C__' + Math.random().toString(15).slice(-256), Math.random().toString(15).slice(-256), function(err) {
+    });
+  } 
+}, 5000);

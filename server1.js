@@ -16,15 +16,10 @@ server1 = net.createServer(function(con) {
 
 server1.listen(3000);
 
-var count = 0;
 
-/*
-var records = setInterval(function() {
-  db6.put(Math.random().toString(15).slice(-256), Math.random().toString(15).slice(-256), function(err) {
-    count++
-    
-    if (count == 10)
-      clearInterval(records)
-  });
-}, 1000)
-*/
+setTimeout(function() {
+  for (var i=0; i<5; i++) {
+    db6.put('A__' + Math.random().toString(15).slice(-256), Math.random().toString(15).slice(-256), function(err) {
+    });
+  } 
+}, 5000);
