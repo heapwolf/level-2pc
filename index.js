@@ -141,7 +141,9 @@ function Server(localdb, config) {
   
   methods.ready = function(peer, cb) {
     debug('REMOTE PEER READY @', peer);
-    ready_peers.push(peer); 
+    if (_.some(ready_peers, peer) == false) {
+      ready_peers.push(peer); 
+    }
     cb();
   };
 
