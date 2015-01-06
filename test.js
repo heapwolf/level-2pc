@@ -50,6 +50,10 @@ test('more than two peers', function(t) {
   // create three databases and start them.
   //
   test('setup', function(t) {
+    
+    var ready1 = false
+    var ready2 = false
+    var ready3 = false
 
     rmrf.sync('./db1');
     rmrf.sync('./db2');
@@ -71,6 +75,8 @@ test('more than two peers', function(t) {
     });
 
     server1.listen(3000);
+    
+    r1.on('ready', function() { ready1 = true })
 
     //
     // create server 2 with one accidentally duplicate peer.
@@ -81,6 +87,8 @@ test('more than two peers', function(t) {
     });
 
     server2.listen(3001);
+
+    r2.on('ready', function() { ready2 = true })
 
     //
     // create server 3 by adding the peers ad-hoc.
@@ -103,18 +111,21 @@ test('more than two peers', function(t) {
     });
 
     server3.listen(3002);
+
+    r3.on('ready', function() { ready3 = true })
     
-    // Give the peers a few milliseconds to come online
-    setTimeout(function() {
-      t.end();
-    }, 500);
+    var readyInt = setInterval(function() {
+      if (ready1 == true && ready2 == true && ready3 == true) {
+        clearInterval(readyInt);
+        t.end();
+      }
+    }, 250);
   });
 
 
   test('that a random number of records put to one peer are replicated to all other peers', function(t) {
 
     var records = createData('A_', Math.floor(Math.random()*100));
-    //var records = createData('A_', 1);
 
     records.forEach(function(record, index) {
 
@@ -160,7 +171,7 @@ test('more than two peers', function(t) {
     //
     // do 5000 puts.
     //
-    var size = 4;
+    var size = 1;
     var records = createData('B_', size);
     var groups = chunk(records, 2);
 
@@ -173,13 +184,14 @@ test('more than two peers', function(t) {
       db1.batch(newgroup, function(err) {
         t.ok(!err);
         if (index == groups.length-1) {
-          [db2, db3].forEach(verifyRecords);
+          setTimeout(function() {
+            [db2, db3].forEach(verifyRecords);
+          }, 1000);
         }
       });
     });
 
     function verifyRecords(db, index) {
-
       var results = [];
       db.createReadStream({ gte: 'B_', lte: 'B_~' })
         .on('data', function(r) {
@@ -236,7 +248,7 @@ test('more than two peers', function(t) {
           db1.get('\xffxxl\xff3003localhost\xfftest1key', function(err) {
             t.ok(!err, 'replication key found in db1');
             
-            r4 = rs.createServer(db4, createOpts(3003, 3000, 3001, 3002));
+            r4 = rs.createServer(db4, createOpts(3003, 3000, 3001, 3002, 3004));
 
             server4 = net.createServer(function(con) {
               r4.pipe(con).pipe(r4);
@@ -250,13 +262,11 @@ test('more than two peers', function(t) {
                 t.ok(!err, 'key was found in db4')
                 db1.get('\xffxxl\xff3003localhost\xfftest1key', function(err) {
                   t.ok(err, 'replication key not found in db1');
-                  t.end();
-
                   server4.close();
-                  db4.close();
+                  t.end();
                 })
               });
-            }, 250);
+            }, 1000);
           })
         });
       });
@@ -277,12 +287,16 @@ test('more than two peers', function(t) {
         // after the last record is put, all records should be in the database.
         //
         if (index == records.length - 1) {
-          verifyReplication();
+          verifyReplication();            
         }
       });
     });
 
     function verifyReplication() {
+      r1.addPeer({host: 'localhost', port: 3004})
+      r2.addPeer({host: 'localhost', port: 3004})
+      r3.addPeer({host: 'localhost', port: 3004})
+      r4.addPeer({host: 'localhost', port: 3004})
       r5 = rs.createServer(db5, createOpts(3004, 3000, 3001, 3002, 3003));
 
       server5 = net.createServer(function(con) {
@@ -290,35 +304,41 @@ test('more than two peers', function(t) {
       });
 
       server5.listen(3004);
-
-      setTimeout(function() {
+      
+      r5.on('ready', function() {
         var results = [];
         var count = 0;
-
         db5.createReadStream({ gte: 'C_', lte: 'C_~' })
           .on('data', function(r) {
             ++count;
             results.push(r);
+            console.log('data');
           })
           .on('end', function() {
+            console.log('end');
             t.equal(count, records.length)
             t.equal(
               JSON.stringify(results), JSON.stringify(records)
             );
+            server5.close();
             t.end();
           });
-      }, 2500)
+      })
     }
   });
 */
-
+  
   test('teardown', function(t) {
     server1.close();
     server2.close();
     server3.close();
+    //server4.close();
+    //server5.close();
     db1.close();
     db2.close();
     db3.close();
+    db4.close();
+    db5.close();
     t.end();
   });
 

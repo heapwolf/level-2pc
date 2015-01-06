@@ -2,27 +2,29 @@ var rpc = require('rpc-stream');
 var createClient = require('./client');
 var net = require('net');
 var ttl = require('level-ttl');
-var debug = require('debug')('level2pc');
-var lodash = require('lodash');
+var _ = require('lodash');
 
 var prefix = '\xffxxl\xff';
 var ttlk = '\xffttl\xff';
 var HR1 = { ttl: 1000 * 60 * 60 };
-var local_peer = {};
-var local_count = 0;
 
 function Server(localdb, config) {
 
-  config = lodash.merge({mode: 'semisync'}, config);
   ttl(localdb);
 
-  local_peer = {host: config.host, port: config.port};
+  var config = _.merge({mode: 'semisync'}, config);
+  config.name = config.port+config.host;
+  config.name = config.name.toUpperCase();
+
+  var debug = require('debug')('level2pc:' + config.name);
+
+  var local_count = 0;
+  var local_peer = {host: config.host, port: config.port};
 
   var db = {
     batch: localdb.batch.bind(localdb),
     put: localdb.put.bind(localdb),
-    del: localdb.del.bind(localdb),
-    createReadStream: localdb.createReadStream.bind(localdb)
+    del: localdb.del.bind(localdb)
   };
 
   function prefixOps(arr, prefix_peers) {
@@ -102,7 +104,7 @@ function Server(localdb, config) {
   var ready_peers = [];
 
   methods.quorum = function (op, peer, cb) {
-    debug('QUORUM PHASE @', config.host, config.port, peer)
+    debug('QUORUM PHASE @', peer.host, peer.port)
     
     if (op.type == 'batch') {
       db.batch(prefixOps(op.value, false), op.opts, cb);
@@ -122,7 +124,7 @@ function Server(localdb, config) {
   };
   
   methods.syncPeer = function(sync_peer, cb) {
-    debug('REMOTE PEER SYNC @', sync_peer);
+    debug('REMOTE PEER SYNC @', sync_peer.host, sync_peer.port);
 
     var syncInterval = setInterval(function() {
       if (isConnectedPeer(sync_peer) == false) return;
@@ -176,15 +178,11 @@ function Server(localdb, config) {
   var loaded;
 
   function isConnectedPeer(peer) {
-    var result = false;
-    for (var i=0; i<connected_peers.length; i++) {
-      var cpeer = connected_peers[i];
-      if (cpeer.host == peer.host && cpeer.port == peer.port) {
-        result = true;
-        break;
-      }
-    }
-    return result;
+    return connected_peers.some(function(p) {
+      var host = p.host == peer.host;
+      var port = p.port == peer.port;
+      return host && port;
+    })
   }
 
   function connectionError(host, port) {
@@ -261,8 +259,8 @@ function Server(localdb, config) {
       return cb(null, []);
 
     !function next() {
-      connected_peers.map(function(peer) {
-        debug('COORDINATING PEER @', config.host, config.port, peer)
+      ready_peers.map(function(peer) {
+        debug('COORDINATING PEER @', phase, peer.host, peer.port)
 
         var remote = connections[peer.port + peer.host];
       
@@ -313,13 +311,11 @@ function Server(localdb, config) {
     }();
   }
 
-  function confirmPeers(op, peers, cb) {
+  function confirmPeerReplication(op, peers, cb) {
 
-    if (peers.length == 0)
-      return cb();
+    if (peers.length == 0) return cb();
 
     var ops = [];
-
     peers.map(function(peer) {
       if (op.type == 'batch') {
         op.value.forEach(function(o) {
@@ -354,7 +350,7 @@ function Server(localdb, config) {
       remote_peer['commit'](op, peer, function(err) {
         if (err) return debug('SYNC PEER ERROR @', err);
         
-        confirmPeers(op, [peer], function(err) {
+        confirmPeerReplication(op, [peer], function(err) {
           if (err) return debug('SYNC CONFIRM PEER ERROR @', err);
         })
       });
@@ -379,7 +375,7 @@ function Server(localdb, config) {
       if (err) return cb(err);
       methods.commit(op, local_peer, function(err) {
         if (err) return cb(err);
-        confirmPeers(op, peers, cb);
+        confirmPeerReplication(op, peers, cb);
       });
     });
   }
