@@ -266,7 +266,7 @@ test('more than two peers', function(t) {
                   t.end();
                 })
               });
-            }, 1000);
+            }, 3000);
           })
         });
       });
