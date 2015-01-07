@@ -281,7 +281,12 @@ function Server(localdb, config) {
       return cb(null, []);
 
     !function next() {
-      ready_peers.map(function(peer) {
+      var replicate_peers = ready_peers;
+      if (config.mode == 'sync') {
+        replicate_peers = config.peers;
+      }
+      
+      replicate_peers.map(function(peer) {
         debug('COORDINATING PEER @', phase, peer.host, peer.port)
 
         var remote = connections[peer.port + peer.host];

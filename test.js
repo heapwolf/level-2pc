@@ -76,7 +76,7 @@ test('more than two peers', function(t) {
 
     server1.listen(3000);
     
-    r1.on('ready', function() { ready1 = true })
+    r1.once('ready', function() { ready1 = true })
 
     //
     // create server 2 with one accidentally duplicate peer.
@@ -88,7 +88,7 @@ test('more than two peers', function(t) {
 
     server2.listen(3001);
 
-    r2.on('ready', function() { ready2 = true })
+    r2.once('ready', function() { ready2 = true })
 
     //
     // create server 3 by adding the peers ad-hoc.
@@ -112,7 +112,7 @@ test('more than two peers', function(t) {
 
     server3.listen(3002);
 
-    r3.on('ready', function() { ready3 = true })
+    r3.once('ready', function() { ready3 = true })
     
     var readyInt = setInterval(function() {
       if (ready1 == true && ready2 == true && ready3 == true) {
