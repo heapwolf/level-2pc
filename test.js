@@ -5,7 +5,6 @@ var rmrf = require('rimraf');
 var tap = require('tap');
 var test = tap.test;
 
-
 function createOpts() {
   var ports = [].slice.call(arguments);
   var thisport = ports.shift();
@@ -70,6 +69,7 @@ test('more than two peers', function(t) {
     // create server 1.
     //
     r1 = rs.createServer(db1, createOpts(3000, 3001, 3002, 3003));
+    r1.setMaxListeners(0);
     server1 = net.createServer(function(con) {
       r1.pipe(con).pipe(r1);
     });
@@ -82,6 +82,7 @@ test('more than two peers', function(t) {
     // create server 2 with one accidentally duplicate peer.
     //
     r2 = rs.createServer(db2, createOpts(3001, 3000, 3002, 3003));
+    r2.setMaxListeners(0);
     server2 = net.createServer(function(con) {
       r2.pipe(con).pipe(r2);
     });
@@ -105,7 +106,7 @@ test('more than two peers', function(t) {
     });
     */
     r3 = rs.createServer(db3, createOpts(3002, 3000, 3001, 3003));
-
+    r3.setMaxListeners(0);
     server3 = net.createServer(function(con) {
       r3.pipe(con).pipe(r3);
     });
@@ -249,7 +250,7 @@ test('more than two peers', function(t) {
             t.ok(!err, 'replication key found in db1');
             
             r4 = rs.createServer(db4, createOpts(3003, 3000, 3001, 3002, 3004));
-
+            r4.setMaxListeners(0);
             server4 = net.createServer(function(con) {
               r4.pipe(con).pipe(r4);
             });
@@ -295,7 +296,7 @@ test('more than two peers', function(t) {
 
     function verifyReplication() {
       r5 = rs.createServer(db5, createOpts(3004, 3000, 3001, 3002));
-
+      r5.setMaxListeners(0);
       server5 = net.createServer(function(con) {
         r5.pipe(con).pipe(r5);
       });

@@ -1,6 +1,6 @@
 {
   "name": "level-2pc",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "A two-phase-commit protocol for leveldb.",
   "main": "index.js",
   "scripts": {
@@ -25,7 +25,7 @@
     "level-key": "^1.0.0",
     "level-ttl": "^2.1.1",
     "reconnect-core": "^0.2.1",
-    "rpc-stream": "~2.1.1",
+    "rpc-stream": "git://github.com/hij1nx/rpc-stream.git",
     "xtend": "~4.0.0"
   },
   "devDependencies": {
