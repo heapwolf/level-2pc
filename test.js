@@ -316,7 +316,6 @@ test('more than two peers', function(t) {
               t.equal(
                 JSON.stringify(results), JSON.stringify(records)
               );
-              server5.close();
               t.end();
             });          
         }, 10 * size)
@@ -329,7 +328,7 @@ test('more than two peers', function(t) {
     server2.close();
     server3.close();
     //server4.close();
-    //server5.close();
+    server5.close();
     db1.close();
     db2.close();
     db3.close();
