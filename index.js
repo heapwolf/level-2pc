@@ -14,17 +14,36 @@ function Server(localdb, config) {
 
   var config = xtend({mode: 'semisync'}, config);
   config.name = (config.port+config.host).toUpperCase();
+  config.peers = config.peers || [];
 
   var debug = require('debug')('level2pc:' + config.name);
 
   var local_count = 0;
   var local_peer = {host: config.host, port: config.port};
 
+  var connections = {};
+  var clients = [];
+  var connected_peers = [];
+  var loaded;
+  var ready;
+  var reconcile;
+  var ready_peers = [];
+
   var db = {
     batch: localdb.batch.bind(localdb),
     put: localdb.put.bind(localdb),
     del: localdb.del.bind(localdb)
   };
+
+  function connectionError(host, port) {
+    return new Error('Connection failed to ' + host + ':' + port);
+  }
+
+  function isLocalPeer(peer) {
+    var result = (local_peer.host == peer.host && local_peer.port == peer.port);
+    debug('isLocalPeer', result, peer);
+    return result;
+  }
 
   function containsPeer(peers, peer) {
     return peers.some(function(p) {
@@ -106,9 +125,18 @@ function Server(localdb, config) {
     });
   };
 
-  config.peers = config.peers || [];
+  var close = localdb.close;
+
+  localdb.close = function() {
+    clients.map(function(client) {
+      client.disconnect();
+    });
+    close.apply(localdb, arguments);
+  };
+
+
+
   var methods = {};
-  var ready_peers = [];
 
   methods.quorum = function (op, peer, cb) {
     debug('QUORUM PHASE @', peer.host, peer.port)
@@ -146,69 +174,45 @@ function Server(localdb, config) {
     db.batch(op.value, op.opts, cb);
   };
   
-  methods.ready = function(peer, cb) {
-    debug('REMOTE PEER READY @', peer);
-    if (containsPeer(ready_peers, peer) == false) {
+  methods.ready = function(peer) {
+    debug('PEER READY @', peer);
+    if (!containsPeer(ready_peers, peer)) {
       ready_peers.push(peer); 
     }
-    cb();
   };
-
-  methods.announce = function(peer, cb) {
-    if (containsPeer(config.peers, peer) == false) {
-      debug('REMOTE ADDING PEER @@@@@', peer);
-      addPeer(peer);
-      cb();
-    }
-  }
   
   methods.sync = function(sync_peer, cb) {
-    debug('REMOTE PEER SYNC @', sync_peer.host, sync_peer.port);
+    debug('PEER SYNC @', sync_peer.host, sync_peer.port);
+    debug('PEER PREFIX', prefix);
 
-    var syncInterval = setInterval(function() {
-      if (containsPeer(connected_peers, sync_peer) == false) return;
-      
-      clearInterval(syncInterval);
-      
-      var remote_peer = connections[sync_peer.port+sync_peer.host];
-      
-      localdb.createReadStream()
+    localdb.createReadStream()
       .on('data', function(data) {
-        remote_peer['commit']({type: 'put', key: data.key, value: data.value}, sync_peer, function(err) {
-          if (err) return cb(err);
-        });
+        if (data.key.indexOf(prefix) > -1) return;
+
+        db.put(prefixPeer(sync_peer) + data.key, data.value);
       })
-      .on('error', function(err) {
-        cb(err);
-      })
-      .on('end', function() {
-        cb();
-      })
-    }, 500)
+      .on('end', cb);
   };
 
+  methods.addPeers = function(peers) {
+    peers.forEach(methods.addPeer);
+  };
 
-  var server = rpc(methods);
-  var connections = {};
-  var clients = [];
-  var connected_peers = [];
-  var loaded;
-  var ready;
+  methods.addPeer = function(peer) {
+    if (isLocalPeer(peer)) {
+      debug('addPeer.isLocalPeer', peer)
+      return cb;
+    }
+    if (loaded && containsPeer(config.peers, peer)) {
+      debug('addPeer.alreadyConfigured', peer);
+      return cb;
+    }
 
+    debug('ADD PEER @', peer);
 
-  function connectionError(host, port) {
-    return new Error('Connection failed to ' + host + ':' + port);
-  }
+    config.peers.push(peer);
 
-  function addPeer(peer) {
-
-    if (loaded && config.peers.some(function(p) {
-      var host = p.host == peer.host;
-      var port = p.port == peer.port;
-      return host && port;
-    })) return;
-
-    client = createClient(config);
+    var client = createClient(config);
     client.connect(peer.port, peer.host);
     client.on('error', function(err) {
       server.emit('error', err);
@@ -220,19 +224,36 @@ function Server(localdb, config) {
 
     client.on('connect', function(s) {
       debug('PEER CONNECTED @', peer);
-      var r = rpc();
-      r_remote = r.wrap(methods);
-      connections[peer.port + peer.host] = r_remote;
-      r.pipe(s).pipe(r);
-
-      syncRemotePeer(peer);
 
       connected_peers.push(peer);
-      
-      server.emit('peerConnected', peer);
 
-      r_remote['announce'](local_peer, function() {});
-      r_remote['ready'](local_peer, function() {});
+      var r = rpc();
+      r.pipe(s).pipe(r);
+
+      var r_remote = r.wrap(methods);
+      connections[peer.port + peer.host] = r_remote;
+
+      if (ready) {
+        r_remote['ready'](local_peer);
+      } 
+
+      if (reconcile) {
+        reconcile = false;
+        r_remote['sync'](local_peer, function() {
+          server.emit('ready');
+
+          r_remote['addPeer'](local_peer);            
+          r_remote['addPeers'](connected_peers);
+
+          syncRemotePeer(peer);
+        });
+      }
+      else {
+        r_remote['addPeer'](local_peer);
+        r_remote['addPeers'](connected_peers);
+
+        syncRemotePeer(peer);
+      }
     });
 
     client.on('disconnect', function() {
@@ -246,16 +267,11 @@ function Server(localdb, config) {
     });
 
     clients.push(client);
-
-    if (config.peers.indexOf(peer) == -1) {
-      config.peers.push(peer);
-    }
-    
-    connected_peers.forEach(function(p) {
-      connections[p.port + p.host]['announce'](peer, function() {});
-    });
   };
-  
+
+
+  var server = rpc(methods);
+
   server.on('ready', function() {
     ready = true;
     debug('LOCAL READY', local_peer);
@@ -266,7 +282,7 @@ function Server(localdb, config) {
   });
 
 
-  config.peers.forEach(addPeer);
+  config.peers.forEach(methods.addPeer);
   loaded = true;
   
 
@@ -383,18 +399,6 @@ function Server(localdb, config) {
       });
     });
   }
-  
-  function reconcileLocal() {
-    debug('RECONCILE LOCAL EVENT @', local_peer);
-    server.once('peerConnected', function(peer) {
-      var remote_peer = connections[peer.port+peer.host];
-      remote_peer['sync'](local_peer, function(err, complete) {
-        if (err) return debug('RECONCILE LOCAL ERROR @', err);
-        debug('RECONCILE COMPLETE @');
-        server.emit('ready');
-      })
-    })
-  }
 
   function replicate(op, cb) {
     debug('REPLICATION EVENT @', config.host, config.port)
@@ -407,14 +411,6 @@ function Server(localdb, config) {
     });
   }
 
-  var close = localdb.close;
-
-  localdb.close = function() {
-    clients.map(function(client) {
-      client.disconnect();
-    });
-    close.apply(localdb, arguments);
-  };
 
   if (config.peers.length && config.peers.length > 0) {
     localdb.createReadStream()
@@ -424,7 +420,7 @@ function Server(localdb, config) {
       .on('end', function() {
         if (local_count == 0) {
           debug('NOT READY')
-          reconcileLocal();
+          reconcile = true;
         }
         else {
           server.emit('ready');
