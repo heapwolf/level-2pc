@@ -170,6 +170,7 @@ function Server(localdb, config) {
   localdb.methods['commit'] = { type: 'async' };
   localdb.methods['ready']  = { type: 'async' };
   localdb.methods['addpeer']= { type: 'async' };
+  localdb.methods['confirm']= { type: 'async' };
 
   localdb['quorum'] = function (op, cb) {
     debug('QUORUM PHASE @', config.host, config.port)
@@ -210,6 +211,11 @@ function Server(localdb, config) {
     localdb._repl.batch(op.value, op.opts, cb);
   };
   
+  localdb['confirm'] = function(key, cb) {
+    debug('CONFIRM SYNC', key);
+    localdb._repl.del(key, cb);
+  }
+  
   localdb['ready'] = function(peer) {
     debug('PEER READY', peer.port, peer.host);
     if (!containsPeer(ready_peers, peer)) {
@@ -221,7 +227,7 @@ function Server(localdb, config) {
     addPeer(peer);
   };
 
-  multilevel.writeManifest(localdb, __dirname + '/manifest.json');
+  //multilevel.writeManifest(localdb, __dirname + '/manifest.json');
 
   var server = multilevel.server(localdb);
   server.on('ready', function() {
@@ -234,6 +240,12 @@ function Server(localdb, config) {
     });
   });
 
+  server.on('close', function() {
+    clients.map(function(client) {
+      client.disconnect();
+    })
+  });
+
 
   function addPeer(peer) {
     if (isLocalPeer(peer)) {
@@ -244,11 +256,11 @@ function Server(localdb, config) {
     }
 
     debug('addPeer', peer);
+
     config.peers.push(peer);
 
-    var db = multilevel.client(require('./manifest.json'));
+    var db = multilevel.client(require('./manifest.json'));      
     connections[peer.port+peer.host] = db;
-
     db.on('error', function(err) {
       debug('MultiLevel Client Error', err);
     });
@@ -285,17 +297,20 @@ function Server(localdb, config) {
 
       if (ready)
         remote.ready(local_peer);
-      
+
       // Pull all from first connected peer!
       if (reconcile) {
         debug('Reconciling');
-        var reconcile_count = 0;
         reconcile = false;
+        var reconcile_count = 0;
         remote.createReadStream()
           .on('data', function(data) {
             if (data.key.indexOf(prefix) == 0) return;
             reconcile_count++;
             localdb._repl.put(data.key, data.value);
+          })
+          .on('error', function(err) {
+            debug('Reconciliation ReadStream Error', err);
           })
           .on('end', function() {
             debug('Reconciliation Complete, Records Syncd', reconcile_count);
@@ -305,14 +320,24 @@ function Server(localdb, config) {
           })
       }
       else {
+        debug('Syncing Missing Keys ...')
+        var sync_count = 0;
         remote.createReadStream({
           gte: prefixPeer(local_peer),
           lte: prefixPeer(local_peer) + '~'
         })
           .on('data', function(data) {
-            localdb._repl.put(data.key.replace(prefixPeer(local_peer)), data.value);
+            sync_count++;
+            localdb._repl.put(data.key.replace(prefixPeer(local_peer), ''), data.value, function(err) {
+              remote.confirm(data.key);
+            });
+          })
+          .on('error', function(err) {
+            debug('Sync Missing Keys ReadStream Error', err);
           })
           .on('end', function() {
+            debug('Sync Missing keys Complete, Records Syncd', sync_count);
+
             if (!ready)
               server.emit('ready');
           });
@@ -466,4 +491,3 @@ function Server(localdb, config) {
 
 exports.Server = Server;
 exports.createServer = Server;
-

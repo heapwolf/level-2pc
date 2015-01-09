@@ -1,1 +1,31 @@
-{"methods":{"createReadStream":{"type":"readable"},"readStream":{"type":"readable"},"createValueStream":{"type":"readable"},"valueStream":{"type":"readable"},"createKeyStream":{"type":"readable"},"keyStream":{"type":"readable"},"createWriteStream":{"type":"writable"},"writeStream":{"type":"writable"},"isOpen":{"type":"sync"},"isClosed":{"type":"sync"},"put":{"type":"async"},"get":{"type":"async"},"del":{"type":"async"},"batch":{"type":"async"},"approximateSize":{"type":"async"},"quorum":{"type":"async"},"commit":{"type":"async"},"ready":{"type":"async"},"addpeer":{"type":"async"}}}
+{
+    "methods": {
+        "addpeer": {
+            "type": "async"
+        },
+        "commit": {
+            "type": "async"
+        },
+        "confirm": {
+            "type": "async"
+        },
+        "createKeyStream": {
+            "type": "readable"
+        },
+        "createReadStream": {
+            "type": "readable"
+        },
+        "createValueStream": {
+            "type": "readable"
+        },
+        "createWriteStream": {
+            "type": "writable"
+        },
+        "quorum": {
+            "type": "async"
+        },
+        "ready": {
+            "type": "async"
+        }
+    }
+}
