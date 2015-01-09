@@ -104,11 +104,11 @@ function Server(localdb, config) {
     });
   };
   
-  function close() {
+  function close(db, cb) {
     clients.map(function(client) {
       client.disconnect();
     });
-    close.apply(localdb, arguments);
+    return db._repl.close.call(db, cb);
   };
   
   localdb['put']   = put.bind(null, localdb);
@@ -173,7 +173,6 @@ function Server(localdb, config) {
   server.on('ready', function() {
     ready = true;
   });
-  
 
 
   function addPeer(peer) {
@@ -185,6 +184,7 @@ function Server(localdb, config) {
     }
 
     debug('addPeer', peer);
+    config.peers.push(peer);
 
     var db = multilevel.client(require('./manifest.json'));
     connections[peer.port+peer.host] = db;
@@ -196,6 +196,8 @@ function Server(localdb, config) {
     var cl = createClient(config);
     var cn = cl.connect(peer.port, peer.host);
 
+    clients.push(cl);
+
     cl.on('error', function(err) {
       debug('Peer Error', peer.port, peer.host, err);
       server.emit('error', err);
@@ -204,7 +206,9 @@ function Server(localdb, config) {
       debug('Peer Fail', peer.port, peer.host);
       server.emit('error', connectionError(peer.host, peer.port));
     });
-
+    cl.on('reconnect', function() {
+      debug('Peer Reconnect Try');
+    })
     cl.on('connect', function(con) {
       debug('Peer Connected', peer.port, peer.host);
       con.pipe(db.createRpcStream()).pipe(con);
@@ -253,12 +257,6 @@ function Server(localdb, config) {
     cl.on('disconnect', function() {
       
     })
-
-    if (config.peers.indexOf(peer) == -1) {
-      config.peers.push(peer);
-    }
-
-    clients.push(cl);
   };
 
 

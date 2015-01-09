@@ -54,18 +54,18 @@ test('more than two peers', function(t) {
     rmrf.sync('./db1');
     rmrf.sync('./db2');
     rmrf.sync('./db3');
-    rmrf.sync('./db4');
+    //rmrf.sync('./db4');
     db1 = level('./db1', { valueEncoding: 'json' });
     db2 = level('./db2', { valueEncoding: 'json' });
     db3 = level('./db3', { valueEncoding: 'json' });
-    db4 = level('./db4', { valueEncoding: 'json' });
+    //db4 = level('./db4', { valueEncoding: 'json' });
 
     //
     // create server 1.
     //
     r1 = rs.createServer(db1, createOpts(3000, 3001, 3002));
     server1 = net.createServer(function(con) {
-      r1.pipe(con).pipe(r1);
+      con.pipe(r1).pipe(con);
     });
 
     server1.listen(3000);
@@ -75,7 +75,7 @@ test('more than two peers', function(t) {
     //
     r2 = rs.createServer(db2, createOpts(3001, 3000, 3002));
     server2 = net.createServer(function(con) {
-      r2.pipe(con).pipe(r2);
+      con.pipe(r2).pipe(con);
     });
 
     server2.listen(3001);
@@ -83,27 +83,20 @@ test('more than two peers', function(t) {
     //
     // create server 3 by adding the peers ad-hoc.
     //
-    r3 = rs.createServer(db3, { port: 3002, host: 'localhost' });
-
-    [
-      { host: 'localhost', port: 3000 }, 
-      { host: 'localhost', port: 3001 }
-    ].forEach(function(peer) {
-      r3.addPeer(peer);
-    });
-
+    r3 = rs.createServer(db3, createOpts(3002, 3001, 3002));
     server3 = net.createServer(function(con) {
-      r3.pipe(con).pipe(r3);
+      con.pipe(r3).pipe(con);
     });
 
     server3.listen(3002);
+
     t.end();
   });
 
 
   test('that a random number of records put to one peer are replicated to all other peers', function(t) {
 
-    var records = createData('A_', Math.floor(Math.random()*100));
+    var records = createData('A_', Math.floor(Math.random()*10));
 
     records.forEach(function(record, index) {
 
@@ -183,23 +176,15 @@ test('more than two peers', function(t) {
     }
   });
 
-
+/*
   test('replicating with servers that can never be reached', function(t) {
 
     //
     // create server 3 by adding the peers ad-hoc.
     //
-    r4 = rs.createServer(db4, { port: 3004, host: 'localhost', failAfter: 200 });
-
-    [
-      { host: 'localhost', port: 3999 }, 
-      { host: 'localhost', port: 3998 }
-    ].forEach(function(peer) {
-      r4.addPeer(peer);
-    });
-
+    r4 = rs.createServer(db4, createOpts(3004, 3999, 3998));
     server4 = net.createServer(function(con) {
-      r4.pipe(con).pipe(r4);
+      con.pipe(r4).pipe(con);
     });
 
     server4.listen(3004);
@@ -214,7 +199,7 @@ test('more than two peers', function(t) {
       t.end();
     });
   });
-
+*/
 
   test('that a single record is added to all peers before returning the callback', function(t) {
     
@@ -248,12 +233,12 @@ test('more than two peers', function(t) {
 
 
   test('teardown', function(t) {
-    db1.close();
-    db2.close();
-    db3.close();
     server1.close();
     server2.close();
     server3.close();
+    db1.close();
+    db2.close();
+    db3.close();
     t.end();
   });
 
