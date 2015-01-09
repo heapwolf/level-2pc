@@ -54,11 +54,11 @@ test('more than two peers', function(t) {
     rmrf.sync('./db1');
     rmrf.sync('./db2');
     rmrf.sync('./db3');
-    //rmrf.sync('./db4');
+    rmrf.sync('./db4');
     db1 = level('./db1', { valueEncoding: 'json' });
     db2 = level('./db2', { valueEncoding: 'json' });
     db3 = level('./db3', { valueEncoding: 'json' });
-    //db4 = level('./db4', { valueEncoding: 'json' });
+    db4 = level('./db4', { valueEncoding: 'json' });
 
     //
     // create server 1.
@@ -90,13 +90,15 @@ test('more than two peers', function(t) {
 
     server3.listen(3002);
 
-    t.end();
+    setTimeout(function() {
+      t.end();
+    }, 2000)
   });
 
 
   test('that a random number of records put to one peer are replicated to all other peers', function(t) {
 
-    var records = createData('A_', Math.floor(Math.random()*10));
+    var records = createData('A_', Math.floor(Math.random()*100));
 
     records.forEach(function(record, index) {
 
@@ -142,7 +144,7 @@ test('more than two peers', function(t) {
     //
     // do 5000 puts.
     //
-    var size = 4;
+    var size = 1000;
     var records = createData('B_', size);
     var groups = chunk(records, 2);
 

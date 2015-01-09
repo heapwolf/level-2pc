@@ -343,7 +343,8 @@ function Server(localdb, config) {
     
     !function next() {
       replicate_peers.map(function(peer) {
-        debug('COORDINATING PEER @', config.host, config.port, peer)
+        debug('COORDINATING PEER @', config.host, config.port, peer);
+        debug('REPLICATING PEERS @', replicate_peers);
 
         var remote = connections[peer.port + peer.host];
 
@@ -459,11 +460,6 @@ function Server(localdb, config) {
   else {
     server.emit('ready');
   }
-
-  setInterval(function() {
-    debug('CONNECTED PEERS', connected_peers);
-    debug('READY PEERS', ready_peers);
-  }, 10000);
 
   return server;
 }
