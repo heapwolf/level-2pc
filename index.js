@@ -171,7 +171,12 @@ function Server(localdb, config) {
 
   var server = multilevel.server(localdb);
   server.on('ready', function() {
+    debug('READY')
     ready = true;
+    connected_peers.forEach(function(peer) {
+      var remote = connections[peer.port+peer.host];
+      remote.ready(local_peer);
+    });
   });
 
 
@@ -207,15 +212,17 @@ function Server(localdb, config) {
       server.emit('error', connectionError(peer.host, peer.port));
     });
     cl.on('reconnect', function() {
-      debug('Peer Reconnect Try');
+      debug('Peer Reconnect Try', peer.host, peer.port);
     })
     cl.on('connect', function(con) {
       debug('Peer Connected', peer.port, peer.host);
+
       con.pipe(db.createRpcStream()).pipe(con);
-      server.emit('peerConnected');
       
+      connected_peers.push(peer);
+
       var remote = connections[peer.port+peer.host];
-      
+
       remote.addpeer(local_peer);
       config.peers.map(function(p) {
         remote.addpeer(p);
@@ -237,7 +244,9 @@ function Server(localdb, config) {
           })
           .on('end', function() {
             debug('Reconciliation Complete, Records Syncd', reconcile_count);
-            server.emit('ready');
+            
+            if (!ready)
+              server.emit('ready');
           })
       }
       else {
@@ -249,14 +258,22 @@ function Server(localdb, config) {
             localdb._repl.put(data.key.replace(peerPrefix(local_peer)), data.value);
           })
           .on('end', function() {
-            server.emit('ready');
+            if (!ready)
+              server.emit('ready');
           });
       }
     });
     
     cl.on('disconnect', function() {
-      
-    })
+      if (connected_peers.indexOf(peer) > -1) {
+        debug('Removed from connected_peers array');
+        connected_peers.splice(connected_peers.indexOf(peer), 1)
+      }
+      if (ready_peers.indexOf(peer) > -1) {
+        debug('Removed from ready_peers array');
+        ready_peers.splice(ready_peers.indexOf(peer), 1);
+      }
+    });
   };
 
 
@@ -264,7 +281,7 @@ function Server(localdb, config) {
 
     var phase = 'quorum';
     var index = 0;
-
+    
     !function next() {
       config.peers.map(function(peer) {
         debug('COORDINATING PEER @', config.host, config.port, peer)
@@ -348,6 +365,11 @@ function Server(localdb, config) {
   else {
     server.emit('ready');
   }
+
+  setInterval(function() {
+    debug('CONNECTED PEERS', connected_peers);
+    debug('READY PEERS', ready_peers);
+  }, 10000);
 
   return server;
 }
