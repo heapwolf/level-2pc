@@ -20,6 +20,7 @@ function Server(localdb, config) {
   var clients = [];
   var connected_peers = [];
   var connections = {};
+  var streams = [];
   var local_count = 0;
   var local_peer  = {host: config.host, port: config.port};
 
@@ -63,14 +64,6 @@ function Server(localdb, config) {
     return prefix + peer.port + peer.host + '\xff';
   }
 
-  /*function prefixOps(arr) {
-    var ops = [];
-    arr.map(function(op) {
-      ops.push({ key: prefix + op.key, value: op.value, type: op.type });
-    });
-    return ops;
-  }*/
-
   function prefixOps(arr, prefix_peers) {
     var ops = [];
     arr.map(function(op) {
@@ -99,11 +92,6 @@ function Server(localdb, config) {
       var op = { type: 'del', key: key };
       replicate(op, cb);
     });
-
-    /*db._repl.del.call(db, prefix + key, function(err) {
-      var op = { type: 'del', key: key };
-      replicate(op, cb);
-    });*/
   };
 
   function put(db, key, val, opts, cb) {
@@ -127,11 +115,6 @@ function Server(localdb, config) {
       var op = { type: 'put', key: key, value: val, opts: opts };
       replicate(op, cb);
     });
-
-    /*db._repl.put.call(db, prefix + key, val, opts, function(err) {
-      var op = { type: 'put', key: key, value: val, opts: opts };
-      replicate(op, cb);
-    });*/
   };
 
   function batch(db, arr, opts, cb) {
@@ -147,10 +130,6 @@ function Server(localdb, config) {
       var op = { type: 'batch', value: arr };
       replicate(op, cb);
     });
-    /*db._repl.batch.call(db, prefixOps(arr), opts, function(err) {
-      var op = { type: 'batch', value: arr };
-      replicate(op, cb);
-    });*/
   };
   
   function close(db, cb) {
@@ -179,11 +158,9 @@ function Server(localdb, config) {
       localdb._repl.batch(prefixOps(op.value, false), op.opts, cb);
     }
     else if (op.type == 'put') {
-      //localdb._repl.put(prefix + op.key, op.value, op.opts, cb);
       localdb._repl.put(prefixPeer(local_peer) + op.key, op.value, op.opts, cb);
     }
     else if (op.type == 'del') {
-      //localdb._repl.del(prefix + op.key, cb);
       localdb._repl.del(prefixPeer(local_peer) + op.key, cb);
     }
   };
@@ -193,14 +170,11 @@ function Server(localdb, config) {
 
     if (op.type == 'batch') {
       op.value.forEach(function(o) {
-        //op.value.push({ type: 'del', key: prefix + o.key })
         op.value.push({ type: 'del', key: prefixPeer(local_peer) + o.key })
       });
     }
     else {
       op.value = [
-        //{ type: 'del', key: prefix + op.key },
-        //{ type: op.type, key: op.key, value: op.value }
         { type: 'del', key: prefixPeer(local_peer) + op.key },
         { type: op.type, key: op.key, value: op.value }
       ];
@@ -230,7 +204,10 @@ function Server(localdb, config) {
   //multilevel.writeManifest(localdb, __dirname + '/manifest.json');
 
   var server = multilevel.server(localdb);
-  server.on('ready', function() {
+
+  server.on('error', function serverErrorHandler(err) {});
+
+  server.on('ready', function serverReadyHandler() {
     debug('READY')
     debug('Ready Peers', ready_peers);
     ready = true;
@@ -240,10 +217,17 @@ function Server(localdb, config) {
     });
   });
 
-  server.on('close', function() {
+  server.on('close', function serverCloseHandler() {
+    // Close any open read streams
+    streams.map(function(stream) {
+      stream.pause();
+      stream.destroy();
+    });
+
+    // Close out all connected peers
     clients.map(function(client) {
       client.disconnect();
-    })
+    });
   });
 
 
@@ -284,7 +268,7 @@ function Server(localdb, config) {
     cl.on('connect', function(con) {
       debug('Peer Connected', peer.port, peer.host);
 
-      con.pipe(db.createRpcStream()).pipe(con);
+      con.pipe(db.createRpcStream()).pipe(con)
       
       connected_peers.push(peer);
 
@@ -303,7 +287,7 @@ function Server(localdb, config) {
         debug('Reconciling');
         reconcile = false;
         var reconcile_count = 0;
-        remote.createReadStream()
+        var rstream = remote.createReadStream()
           .on('data', function(data) {
             if (data.key.indexOf(prefix) == 0) return;
             reconcile_count++;
@@ -312,17 +296,21 @@ function Server(localdb, config) {
           .on('error', function(err) {
             debug('Reconciliation ReadStream Error', err);
           })
-          .on('end', function() {
+          .on('close', function() {
             debug('Reconciliation Complete, Records Syncd', reconcile_count);
+            
+            cleanupStream(rstream);
             
             if (!ready)
               server.emit('ready');
           })
+
+        streams.push(rstream);
       }
       else {
         debug('Syncing Missing Keys ...')
         var sync_count = 0;
-        remote.createReadStream({
+        var rstream = remote.createReadStream({
           gte: prefixPeer(local_peer),
           lte: prefixPeer(local_peer) + '~'
         })
@@ -335,12 +323,16 @@ function Server(localdb, config) {
           .on('error', function(err) {
             debug('Sync Missing Keys ReadStream Error', err);
           })
-          .on('end', function() {
+          .on('close', function() {
             debug('Sync Missing keys Complete, Records Syncd', sync_count);
+
+            cleanupStream(rstream);
 
             if (!ready)
               server.emit('ready');
           });
+
+        streams.push(rstream);
       }
     });
     
@@ -461,6 +453,13 @@ function Server(localdb, config) {
       debug('REPLICATION EVENT CONFIRMED @', config.port, config.host);
       return cb();
     });
+  }
+
+  function cleanupStream(s) {
+    for (var i=0; i<streams.length; i++) {
+      if (streams[i] == s)
+        streams.splice(i, 1);
+    }
   }
 
   config.peers = config.peers || [];
