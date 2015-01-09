@@ -13,7 +13,7 @@ var HR1 = { ttl: 1000 * 60 * 60 };
 function Server(localdb, config) {
  
   config = config || {};
-  //ttl(localdb);
+  ttl(localdb);
 
   var ready, loaded, reconcile;
   var ready_peers = [];
@@ -22,8 +22,9 @@ function Server(localdb, config) {
   var connections = {};
   var local_count = 0;
   var local_peer  = {host: config.host, port: config.port};
-  
 
+
+  // Setup and overload leveldb functions
   localdb._repl = {
     batch: localdb.batch.bind(localdb),
     put: localdb.put.bind(localdb),
@@ -48,15 +49,37 @@ function Server(localdb, config) {
       return host && port;
     })
   }
+  
+  function peerIndex(peers, peer) {
+    if (!containsPeer(peers, peer)) return -1;
+    for (var i=0; i<peers.length; i++) {
+      if (peers[i].host == peer.host && peers[i].port == peer.port) {
+        return i;
+      }
+    }
+  }
 
   function prefixPeer(peer) {
     return prefix + peer.port + peer.host + '\xff';
   }
 
-  function prefixOps(arr) {
+  /*function prefixOps(arr) {
     var ops = [];
     arr.map(function(op) {
       ops.push({ key: prefix + op.key, value: op.value, type: op.type });
+    });
+    return ops;
+  }*/
+
+  function prefixOps(arr, prefix_peers) {
+    var ops = [];
+    arr.map(function(op) {
+      ops.push({ key: prefixPeer(local_peer) + op.key, value: op.value, type: op.type });
+      if (prefix_peers) {
+        config.peers.map(function(peer) {
+          ops.push({ key: prefixPeer(peer) + op.key, value: op.value, type: op.type })
+        })
+      }
     });
     return ops;
   }
@@ -66,10 +89,21 @@ function Server(localdb, config) {
     if (key.indexOf(ttlk) == 0)
       return del.apply(localdb, arguments);
 
-    db._repl.del.call(db, prefix + key, function(err) {
+    var ops = [{ type: 'del', key: prefixPeer(local_peer) + key }];
+    config.peers.forEach(function(peer) {
+      ops.push({ type: 'del', key: prefixPeer(peer) + key })
+    });
+
+    db._repl.batch.call(db, ops, function localdbDeleteBatchCallback(err) {
+      if (err) return cb(err);
       var op = { type: 'del', key: key };
       replicate(op, cb);
     });
+
+    /*db._repl.del.call(db, prefix + key, function(err) {
+      var op = { type: 'del', key: key };
+      replicate(op, cb);
+    });*/
   };
 
   function put(db, key, val, opts, cb) {
@@ -83,10 +117,21 @@ function Server(localdb, config) {
       opts = {};
     }
 
-    db._repl.put.call(db, prefix + key, val, opts, function(err) {
+    var ops = [{ type: 'put', key: prefixPeer(local_peer) + key, value: val, opts: opts }];  
+    config.peers.forEach(function(peer) {
+      ops.push({ type: 'put', key: prefixPeer(peer) + key, value: val, opts: opts });
+    });
+
+    db._repl.batch.call(db, ops, function localdbPutBatchCallback(err) {
+      if (err) return cb(err);
       var op = { type: 'put', key: key, value: val, opts: opts };
       replicate(op, cb);
     });
+
+    /*db._repl.put.call(db, prefix + key, val, opts, function(err) {
+      var op = { type: 'put', key: key, value: val, opts: opts };
+      replicate(op, cb);
+    });*/
   };
 
   function batch(db, arr, opts, cb) {
@@ -98,10 +143,14 @@ function Server(localdb, config) {
       opts = {};
     }
 
-    db._repl.batch.call(db, prefixOps(arr), opts, function(err) {
+    db._repl.batch.call(db, prefixOps(arr, true), opts, function localdbBatchBatchCallback(err) {
       var op = { type: 'batch', value: arr };
       replicate(op, cb);
     });
+    /*db._repl.batch.call(db, prefixOps(arr), opts, function(err) {
+      var op = { type: 'batch', value: arr };
+      replicate(op, cb);
+    });*/
   };
   
   function close(db, cb) {
@@ -126,13 +175,15 @@ function Server(localdb, config) {
     debug('QUORUM PHASE @', config.host, config.port)
     
     if (op.type == 'batch') {
-      localdb._repl.batch(prefixOps(op.value), op.opts, cb);
+      localdb._repl.batch(prefixOps(op.value, false), op.opts, cb);
     }
     else if (op.type == 'put') {
-      localdb._repl.put(prefix + op.key, op.value, op.opts, cb);
+      //localdb._repl.put(prefix + op.key, op.value, op.opts, cb);
+      localdb._repl.put(prefixPeer(local_peer) + op.key, op.value, op.opts, cb);
     }
     else if (op.type == 'del') {
-      localdb._repl.del(prefix + op.key, cb);
+      //localdb._repl.del(prefix + op.key, cb);
+      localdb._repl.del(prefixPeer(local_peer) + op.key, cb);
     }
   };
   
@@ -141,12 +192,15 @@ function Server(localdb, config) {
 
     if (op.type == 'batch') {
       op.value.forEach(function(o) {
-        op.value.push({ type: 'del', key: prefix + o.key })
+        //op.value.push({ type: 'del', key: prefix + o.key })
+        op.value.push({ type: 'del', key: prefixPeer(local_peer) + o.key })
       });
     }
     else {
       op.value = [
-        { type: 'del', key: prefix + op.key },
+        //{ type: 'del', key: prefix + op.key },
+        //{ type: op.type, key: op.key, value: op.value }
+        { type: 'del', key: prefixPeer(local_peer) + op.key },
         { type: op.type, key: op.key, value: op.value }
       ];
     }
@@ -172,6 +226,7 @@ function Server(localdb, config) {
   var server = multilevel.server(localdb);
   server.on('ready', function() {
     debug('READY')
+    debug('Ready Peers', ready_peers);
     ready = true;
     connected_peers.forEach(function(peer) {
       var remote = connections[peer.port+peer.host];
@@ -255,7 +310,7 @@ function Server(localdb, config) {
           lte: prefixPeer(local_peer) + '~'
         })
           .on('data', function(data) {
-            localdb._repl.put(data.key.replace(peerPrefix(local_peer)), data.value);
+            localdb._repl.put(data.key.replace(prefixPeer(local_peer)), data.value);
           })
           .on('end', function() {
             if (!ready)
@@ -265,13 +320,13 @@ function Server(localdb, config) {
     });
     
     cl.on('disconnect', function() {
-      if (connected_peers.indexOf(peer) > -1) {
+      if (containsPeer(connected_peers, peer)) {
         debug('Removed from connected_peers array');
-        connected_peers.splice(connected_peers.indexOf(peer), 1)
+        connected_peers.splice(peerIndex(connected_peers, peer), 1)
       }
-      if (ready_peers.indexOf(peer) > -1) {
+      if (containsPeer(ready_peers, peer)) {
         debug('Removed from ready_peers array');
-        ready_peers.splice(ready_peers.indexOf(peer), 1);
+        ready_peers.splice(peerIndex(ready_peers, peer), 1);
       }
     });
   };
@@ -282,8 +337,12 @@ function Server(localdb, config) {
     var phase = 'quorum';
     var index = 0;
     
+    var replicate_peers = ready_peers;
+    
+    if (replicate_peers.length == 0) return cb(null, []);
+    
     !function next() {
-      config.peers.map(function(peer) {
+      replicate_peers.map(function(peer) {
         debug('COORDINATING PEER @', config.host, config.port, peer)
 
         var remote = connections[peer.port + peer.host];
@@ -295,9 +354,9 @@ function Server(localdb, config) {
               return cb(err);
             }
 
-            if (++index == config.peers.length) {
+            if (++index == replicate_peers.length) {
               if (phase != 'quorum') {
-                return cb();
+                return cb(null, replicate_peers);
               }
 
               phase = 'commit';
@@ -336,10 +395,48 @@ function Server(localdb, config) {
   }
 
   function replicate(op, cb) {
-    debug('REPLICATION EVENT @', config.host, config.port)
-    replicatePeers(op, function(err) {
+    debug('REPLICATION EVENT @', config.port, config.host)
+    replicatePeers(op, function replicateReplicatePeersCallback(err, replicate_peers) {
       if (err) return cb(err);
-      localdb.commit(op, cb);
+      //localdb.commit(op, function replicateLocaldbCommitCallback(err) {
+        //if (err) return cb(err);
+        confirmReplication(op, replicate_peers, cb);
+        //});
+    });
+  }
+
+  function confirmReplication(op, peers, cb) {
+    if (peers.length == 0) {
+      debug('REPLICATION EVENT CONFIRMED @', config.port, config.host);
+      return cb();
+    }
+
+    var ops = [];
+    peers.map(function(peer) {
+      if (op.type == 'batch') {
+        op.value.forEach(function(o) {
+          ops.push({ type: 'del', key: prefixPeer(peer) + o.key })
+        });
+      }
+      else {
+        ops.push({ type: 'del', key: prefixPeer(peer) + op.key });
+      }
+    });
+
+    ops.push({ type: 'del', key: prefixPeer(local_peer) + op.key })
+
+    if (op.type == 'batch') {
+      op.value.forEach(function(o) {
+        ops.push(o);
+      })
+    } else {
+      ops.push(op)
+    }
+    debug('repl ops', ops);
+    localdb._repl.batch(ops, function(err) {
+      if (err) return cb(err);
+      debug('REPLICATION EVENT CONFIRMED @', config.port, config.host);
+      return cb();
     });
   }
 
