@@ -398,10 +398,7 @@ function Server(localdb, config) {
     debug('REPLICATION EVENT @', config.port, config.host)
     replicatePeers(op, function replicateReplicatePeersCallback(err, replicate_peers) {
       if (err) return cb(err);
-      //localdb.commit(op, function replicateLocaldbCommitCallback(err) {
-        //if (err) return cb(err);
-        confirmReplication(op, replicate_peers, cb);
-        //});
+      confirmReplication(op, replicate_peers, cb);
     });
   }
 
@@ -432,7 +429,7 @@ function Server(localdb, config) {
     } else {
       ops.push(op)
     }
-    debug('repl ops', ops);
+
     localdb._repl.batch(ops, function(err) {
       if (err) return cb(err);
       debug('REPLICATION EVENT CONFIRMED @', config.port, config.host);
