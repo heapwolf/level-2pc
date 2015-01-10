@@ -1,9 +1,9 @@
-var rpc = require('rpc-stream');
-var createClient = require('./client');
 var net = require('net');
 var ttl = require('level-ttl');
-var debug = require('debug')('level2pc');
 var multilevel = require('multilevel');
+var createClient = require('./client');
+
+var debug = require('debug')('level2pc');
 
 var prefix = '\xffxxl\xff';
 var ttlk = '\xffttl\xff';
