@@ -24,6 +24,7 @@
     "level-hyper": "^0.18.0",
     "level-key": "^1.0.0",
     "level-ttl": "^2.1.1",
+    "multilevel": "^7.0.1",
     "reconnect-core": "^0.2.1",
     "rpc-stream": "~2.1.1",
     "xtend": "~4.0.0"
