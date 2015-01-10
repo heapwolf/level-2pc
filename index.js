@@ -468,11 +468,9 @@ function Server(localdb, config) {
 
   if (config.peers.length && config.peers.length > 0) {
     var local_count = 0;
-    localdb.createReadStream()
-      .on('data', function(data) {
-        local_count++;
-      })
-      .on('end', function() {
+    localdb.createReadStream({ limit: 5 })
+      .on('data', function(data) { local_count++; })
+      .on('close', function() {
         if (local_count == 0) {
           reconcile = true;
         }
@@ -484,6 +482,18 @@ function Server(localdb, config) {
   else {
     server.emit('ready');
   }
+  
+  /** might need this, might not
+  localdb.createKeyStream({
+    gte: prefixPeer(local_peer),
+    lte: prefixPeer(local_peer) + '~'
+  })
+  .on('data', function(key) {
+    localdb._repl.del(key);
+  })
+  .on('close', function() {
+    debug('Local Peer Replication Cleanup Complete')
+  })*/
 
   return server;
 }
