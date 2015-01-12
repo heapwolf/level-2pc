@@ -21,6 +21,7 @@
   "license": "MIT",
   "dependencies": {
     "debug": "^2.1.1",
+    "inherits": "^2.0.1",
     "level-hyper": "^0.18.0",
     "level-key": "^1.0.0",
     "level-ttl": "^2.1.1",

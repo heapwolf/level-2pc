@@ -20,16 +20,6 @@ The algorithm for how this works is [`here`](/SPEC.md).
 There are trade-offs to every type of replication. I will
 try to create some specific numbers for you soon.
 
-# REPLICATION METHODS
-
-## SYNCHRONOUS REPLICATION (SYNC)
-
-Write is not considered complete until all peers have acknowledged the write. Strong Consistency. Unfortunately in this mode, if a single peer goes down, then replication will not take place across the remaining peers. 
-
-## SEMI-SYNCHRONOUS REPLICATION (SEMISYNC) (DEFAULT)
-
-The write is considered complete as soon as all connected and alive peers confirm the write. In this mode, if a peer goes down, it is removed from the peers required to acknowledge the write. This still provides strong consistency for all the connected peers, but better fault tolerance and flexibility for adding new peers and for peers going down for maintainance or network distruptions.
-
 # USAGE
 
 ## EXAMPLE
@@ -37,22 +27,28 @@ The write is considered complete as soon as all connected and alive peers confir
 ### SERVER A
 ```js
 var level = require('level');
-var replicate = require('level-2pc');
+var Replicator = require('level-2pc');
 var net = require('net');
 
 var db1 = level('./db', { valueEncoding: 'json' });
 
-var opts = { 
+var opts = {
+
+  // an array of objects that specify the host and port of each peer.
   peers: [
     { host: 'localhost', port: 3001 }, 
     { host: 'localhost', port: 3002 }
-  ]
+  ],
+
+  // how many peers must connect initially or respond to quorum
+  minConcensus: 2 
 };
 
-var a = replicate.createServer(db1, opts);
+var r = Replicator(db1, opts);
 
 net.createServer(function(con) {
-  a.pipe(con).pipe(a);
+  var server = r();
+  server.pipe(con).pipe(server);
 }).listen(3000);
 ```
 
@@ -66,10 +62,11 @@ var opts = {
   ]
 };
 
-var b = rs.createServer(db2, opts);
+var r = Replicator(db2, opts);
 
 net.createServer(function(con) {
-  b.pipe(con).pipe(b);
+  var server = r();
+  server.pipe(con).pipe(server);
 }).listen(3001);
 ```
 
@@ -82,10 +79,11 @@ var opts = {
   ]
 };
 
-var c = rs.createServer(db3);
+var r = Replicator(db3, opts);
 
 net.createServer(function(con) {
-  c.pipe(con).pipe(c);
+  var server = r();
+  server.pipe(con).pipe(server);
 }).listen(3002);
 ```
 

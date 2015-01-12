@@ -2,15 +2,23 @@ var rpc = require('rpc-stream');
 var createClient = require('./client');
 var ttl = require('level-ttl');
 var xtend = require('xtend');
-var debug = require('debug');
+var debug = require('debug')('level2pc');
+var inherits = require('inherits');
+var Emitter = require('events').EventEmitter;
 
 var prefix = '\xffxxl\xff';
 var ttlk = '\xffttl\xff';
 var HR1 = { ttl: 1000 * 60 * 60 };
 
-module.exports = function createServer(db, opts) {
+var Replicator = module.exports = function Replicator(db, opts) {
+
+  if (!(this instanceof Replicator)) return new Replicator(db, opts);
+  Emitter.call(this);
 
   ttl(db);
+
+  var that = this;
+  this._isReady;
 
   var id = opts.host + ':' + opts.port;
   var peers = {};
@@ -29,7 +37,7 @@ module.exports = function createServer(db, opts) {
 
 
   db.quorum = function quorum(op, cb) {
-    console.log('QUORUM @%d [%j]', opts.port, op);
+    debug('QUORUM @%d [%j]', opts.port, op);
 
     op.opts = op.opts || {};
     op.opts.ttl = opts.ttl || HR1;
@@ -60,7 +68,7 @@ module.exports = function createServer(db, opts) {
       ];
     }
 
-    console.log('COMMIT @%d [%j]', opts.port, op.value);
+    debug('COMMIT @%d [%j]', opts.port, op.value);
 
     _db.batch(op.value, op.opts, cb);
   };
@@ -71,7 +79,7 @@ module.exports = function createServer(db, opts) {
     if (key.indexOf(ttlk) == 0)
       return del.apply(localdb, arguments);
 
-    db.del(prefix + key, function(err) {
+    _db.del(prefix + key, function(err) {
       if (err) return cb(err);
       var op = { type: 'del', key: key };
       replicate(op, cb);
@@ -146,7 +154,7 @@ module.exports = function createServer(db, opts) {
       peers[peer].quorum(op, function quorumCallback(err) {
         if (err && err.message == 'Database is not open') {
 
-          console.log('FAILURE EVENT @%s', peer);
+          debug('FAILURE EVENT @%s', peer);
 
           if (opts.minConcensus && ++failures == opts.minConcensus) {
             return cb(new Error('minimum concensus failed'));
@@ -182,15 +190,23 @@ module.exports = function createServer(db, opts) {
   }
 
 
+  function queue(fn) {
+    if (that._isReady) fn();
+    else that.once('ready', fn);
+  }
+
+
   function replicate(op, cb) {
 
-    console.log('REPLICATION EVENT @%s', opts.port)
+    debug('REPLICATION EVENT @%s', opts.port)
 
-    var len = Object.keys(peers).length;
-    if (!len) return cb(null);
-    quorumPhase(op, len, function quorumPhaseCallback(err) {
-      if (err) return cb(err);
-      db.commit(op, cb);
+    queue(function() {
+      var len = Object.keys(peers).length;
+      if (!len) return cb(null);
+      quorumPhase(op, len, function quorumPhaseCallback(err) {
+        if (err) return cb(err);
+        db.commit(op, cb);
+      });
     });
   }
 
@@ -198,21 +214,27 @@ module.exports = function createServer(db, opts) {
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port;
+    var min = opts.minConcensus || opts.peers.length;
     var client = createClient(opts);
 
     client.connect(peer.port, peer.host);
     connections[peername] = client;
 
-    console.log('CONNECT EVENT %s -> %s', id,  peername)
+    debug('CONNECT EVENT %s -> %s', id,  peername)
 
     client.on('connect', function onConnect(s) {
 
-      console.log('CONNECTION EVENT %s -> %s', id,  peername)
+      debug('CONNECTION EVENT %s -> %s', id,  peername)
 
       var r = rpc();
       remote = r.wrap(db);
       r.pipe(s).pipe(r);
       peers[peername] = remote;
+
+      if (Object.keys(connections).length == min) {
+        that._isReady = true;
+        that.emit('ready');
+      }
     });
 
     client.on('disconnect', function onDisconnect() {
@@ -223,8 +245,10 @@ module.exports = function createServer(db, opts) {
 
   opts.peers.forEach(connect);
 
-  return function Server(con) {
+  this.createServer = function createServer() {
     return rpc(db);
   };
 };
+
+inherits(Replicator, Emitter);
 
