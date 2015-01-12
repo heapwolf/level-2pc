@@ -16,10 +16,6 @@ browser).
 # SPECIFICATION
 The algorithm for how this works is [`here`](/SPEC.md).
 
-# CONSIDERATIONS
-There are trade-offs to every type of replication. I will
-try to create some specific numbers for you soon.
-
 # USAGE
 
 ## EXAMPLE
