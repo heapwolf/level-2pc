@@ -1,254 +1,269 @@
-var rpc = require('rpc-stream');
-var createClient = require('./client');
-var ttl = require('level-ttl');
-var xtend = require('xtend');
-var debug = require('debug')('level2pc');
-var inherits = require('inherits');
-var Emitter = require('events').EventEmitter;
+var rpc = require('rpc-stream')
+var createClient = require('./client')
+var ttl = require('level-ttl')
+var xtend = require('xtend')
+var debug = require('debug')('level2pc')
+var inherits = require('inherits')
+var Emitter = require('events').EventEmitter
 
-var prefix = '\xffxxl\xff';
-var ttlk = '\xffttl\xff';
-var HR1 = { ttl: 1000 * 60 * 60 };
+var prefix = '\xffxxl\xff'
+var ttlk = '\xffttl\xff'
+var HR1 = { ttl: 1000 * 60 * 60 }
 
 var Replicator = module.exports = function Replicator(db, opts) {
 
-  if (!(this instanceof Replicator)) return new Replicator(db, opts);
-  Emitter.call(this);
+  if (!(this instanceof Replicator)) return new Replicator(db, opts)
+  Emitter.call(this)
 
-  ttl(db);
+  ttl(db)
 
-  var that = this;
-  this._isReady;
+  var that = this
+  this._isReady
 
-  var id = opts.host + ':' + opts.port;
-  var peers = {};
-  var connections = {};
-  var _db = {};
+  var id = opts.host + ':' + opts.port
+  var peers = {}
+  var connections = {}
+  var _db = {}
 
-  _db.del = db.del.bind(db);
-  _db.put = db.put.bind(db);
-  _db.batch = db.batch.bind(db);
-  _db.close = db.close.bind(db);
+  _db.del = db.del.bind(db)
+  _db.put = db.put.bind(db)
+  _db.batch = db.batch.bind(db)
+  _db.close = db.close.bind(db)
 
 
   db.addPeer = function addPeer(peer) {
-    connect(peer);
-  };
+    connect(peer)
+  }
 
 
   db.quorum = function quorum(op, cb) {
-    debug('QUORUM @%d [%j]', opts.port, op);
+    debug('QUORUM @%d [%j]', opts.port, op)
 
-    op.opts = op.opts || {};
-    op.opts.ttl = opts.ttl || HR1;
+    op.opts = op.opts || {}
+    op.opts.ttl = opts.ttl || HR1
 
     if (op.type == 'batch') {
-      _db.batch(prefixOps(op.value), op.opts, cb);
+      _db.batch(prefixOps(op.value), op.opts, cb)
     }
     else if (op.type == 'put') {
-      _db.put(prefix + op.key, op.value, op.opts, cb);
+      _db.put(prefix + op.key, op.value, op.opts, cb)
     }
     else if (op.type == 'del') {
-      _db.del(prefix + op.key, cb);
+      _db.del(prefix + op.key, cb)
     }
-  };
+  }
 
 
   db.commit = function commit(op, cb) {
 
     if (op.type == 'batch') {
       op.value.forEach(function(o) {
-        op.value.push({ type: 'del', key: prefix + o.key });
-      });
+        op.value.push({ type: 'del', key: prefix + o.key })
+      })
     }
     else {
       op.value = [
         { type: 'del', key: prefix + op.key },
         { type: op.type, key: op.key, value: op.value }
-      ];
+      ]
     }
 
-    debug('COMMIT @%d [%j]', opts.port, op.value);
+    debug('COMMIT @%d [%j]', opts.port, op.value)
 
-    _db.batch(op.value, op.opts, cb);
-  };
+    _db.batch(op.value, op.opts, cb)
+  }
 
 
   db.del = function del(key, cb) {
 
     if (key.indexOf(ttlk) == 0)
-      return del.apply(localdb, arguments);
+      return del.apply(localdb, arguments)
 
-    _db.del(prefix + key, function(err) {
-      if (err) return cb(err);
-      var op = { type: 'del', key: key };
-      replicate(op, cb);
-    });
-  };
+    queue(function() {
+      _db.del(prefix + key, function(err) {
+        if (err) return cb(err)
+        var op = { type: 'del', key: key }
+        replicate(op, cb)
+      })
+    })
+  }
 
 
   db.put = function put(key, value, opts, cb) {
 
     if ('function' == typeof opts) {
-      cb = opts;
-      opts = {};
+      cb = opts
+      opts = {}
     }
 
-    _db.put(prefix + key, value, opts, function(err) {
-      if (err) return cb(err);
-      var op = { type: 'put', key: key, value: value, opts: opts };
-      replicate(op, cb);
-    });
-  };
+    queue(function() {
+      _db.put(prefix + key, value, opts, function(err) {
+        if (err) return cb(err)
+        var op = { type: 'put', key: key, value: value, opts: opts }
+        replicate(op, cb)
+      })
+    })
+  }
 
 
   db.batch = function batch(arr, opts, cb) {
     if (arr[0] && arr[0].key.indexOf(ttlk) == 0)
-      return db.batch.apply(localdb, arguments);
+      return db.batch.apply(localdb, arguments)
 
     if ('function' == typeof opts) {
-      cb = opts;
-      opts = {};
+      cb = opts
+      opts = {}
     }
 
-    _db.batch(prefixOps(arr, true), opts, function(err) {
-      var op = { type: 'batch', value: arr };
-      replicate(op, cb);
-    });
-  };
-
-
-  db.close = function close() {
-    for (var client in connections) {
-      connections[client].disconnect();
-      delete connections[client];
-    }
-    _db.close.apply(_db, arguments);
-  };
+    queue(function() {
+      _db.batch(prefixOps(arr, true), opts, function(err) {
+        var op = { type: 'batch', value: arr }
+        replicate(op, cb)
+      })
+    })
+  }
 
 
   function prefixWithPeer(peer) {
-    return prefix + '!' + peer + '!';
+    return prefix + '!' + peer + '!'
   }
 
 
   function prefixOps(arr) {
-    var ops = [];
+    var ops = []
     arr.map(function opsMap(op) {
       ops.push({ 
         key: prefix + op.key, 
         value: op.value, 
         type: op.type 
-      });
-    });
-    return ops;
+      })
+    })
+    return ops
   }
 
 
   function quorumPhase(op, len, cb) {
-    var index = 0;
-    var failures = 0;
+    var index = 0
+    var failures = 0
 
     for (var peer in peers) {
 
       peers[peer].quorum(op, function quorumCallback(err) {
         if (err && err.message == 'Database is not open') {
 
-          debug('FAILURE EVENT @%s', peer);
+          debug('FAILURE EVENT @%s', peer)
 
           if (opts.minConcensus && ++failures == opts.minConcensus) {
-            return cb(new Error('minimum concensus failed'));
+            return cb(new Error('minimum concensus failed'))
           }
         }
         else if (err) {
-          return cb(err);
+          return cb(err)
         }
 
         if (++index == len) {
-          commitPhase(op, len, cb);
+          commitPhase(op, len, cb)
         }
-      });
+      })
     }
   }
 
 
   function commitPhase(op, len, cb) {
-    var index = 0;
+    var index = 0
 
     for (var peer in peers) {
 
       peers[peer].commit(op, function quorumCallback(err) {
         if (err && err.message != 'Database is not open') {
-          return cb(err);
+          return cb(err)
         }
 
         if (++index == len) {
-          cb(null);
+          cb(null)
         }
-      });
+      })
     }
   }
 
 
   function queue(fn) {
-    if (that._isReady) fn();
-    else that.once('ready', fn);
+    if (that._isReady) fn()
+    else that.once('ready', fn)
   }
 
 
   function replicate(op, cb) {
 
-    debug('REPLICATION EVENT @%s', opts.port)
+    debug('REPLICATION EVENT @%s', id)
 
-    queue(function() {
-      var len = Object.keys(peers).length;
-      if (!len) return cb(null);
-      quorumPhase(op, len, function quorumPhaseCallback(err) {
-        if (err) return cb(err);
-        db.commit(op, cb);
-      });
-    });
+    var len = Object.keys(peers).length
+    if (!len) return cb(null)
+    quorumPhase(op, len, function quorumPhaseCallback(err) {
+      if (err) return cb(err)
+      db.commit(op, cb)
+    })
   }
 
 
   function connect(peer, index) {
 
-    var peername = peer.host + ':' + peer.port;
-    var min = opts.minConcensus || opts.peers.length;
-    var client = createClient(opts);
+    var peername = peer.host + ':' + peer.port
+    var min = opts.minConcensus || opts.peers.length
+    var client = createClient(opts)
 
-    client.connect(peer.port, peer.host);
-    connections[peername] = client;
+    client.connect(peer.port, peer.host)
+    connections[peername] = client
 
-    debug('CONNECT EVENT %s -> %s', id,  peername)
+    client.on('fail', function() {
+      that.emit('fail', peer.host, peer.port)
+    })
+
+    client.on('reconnect', function() {
+      debug('RECONNECT EVENT %s -> %s', id, peername)
+      that.emit('reconnect', peer.host, peer.port)
+    })
 
     client.on('connect', function onConnect(s) {
+      
+      debug('CONNECT EVENT %s -> %s', id,  peername)
 
-      debug('CONNECTION EVENT %s -> %s', id,  peername)
+      var r = rpc()
+      remote = r.wrap(db)
+      r.pipe(s).pipe(r)
+      peers[peername] = remote
 
-      var r = rpc();
-      remote = r.wrap(db);
-      r.pipe(s).pipe(r);
-      peers[peername] = remote;
-
-      if (Object.keys(connections).length == min) {
-        that._isReady = true;
-        that.emit('ready');
+      that.emit('connect', peer.host, peer.port)
+      
+      if (Object.keys(peers).length >= min) {
+        debug('READY EVENT %s', id);
+        that._isReady = true
+        that.emit('ready')
       }
-    });
+    })
 
     client.on('disconnect', function onDisconnect() {
-      delete peers[peername];
-      delete connections[peername];
-    });
+      debug('DISCONNECT EVENT %s -> %s', id, peername)
+      that.emit('disconnect', peer.host, peer.port)
+    })
   }
 
-  opts.peers.forEach(connect);
+
+  opts.peers.forEach(connect)
+
+
+  this.close = function closeServer() {
+    for (var client in connections) {
+      connections[client].disconnect()
+    }
+    peers = {}
+  }
+
 
   this.createServer = function createServer() {
-    return rpc(db);
-  };
-};
+    return rpc(db)
+  }
+}
 
-inherits(Replicator, Emitter);
+inherits(Replicator, Emitter)
 
