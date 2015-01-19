@@ -12,9 +12,9 @@ var Replicator = module.exports = function Replicator(db, opts) {
   if (!(this instanceof Replicator)) return new Replicator(db, opts)
   Emitter.call(this)
 
-  var that = this
-  this._isReady
+  this._isReady = false;
 
+  var that = this;
   var id = opts.host + ':' + opts.port
   var peers = {}
   var connections = {}
@@ -192,8 +192,9 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
     debug('REPLICATION EVENT @%s', id)
 
-    var len = Object.keys(peers).length
-    if (!len) return cb(null)
+    var len = opts.minConcensus || Object.keys(peers).length
+    if (!len || len == 0) return db.commit(op, cb)
+
     quorumPhase(op, len, function quorumPhaseCallback(err) {
       if (err) return cb(err)
       db.commit(op, cb)
@@ -229,7 +230,6 @@ var Replicator = module.exports = function Replicator(db, opts) {
       peers[peername] = remote
 
       that.emit('connect', peer.host, peer.port)
-      
       if (Object.keys(peers).length >= min) {
         debug('READY EVENT %s', id);
         that._isReady = true
@@ -240,7 +240,22 @@ var Replicator = module.exports = function Replicator(db, opts) {
     client.on('disconnect', function onDisconnect() {
       debug('DISCONNECT EVENT %s -> %s', id, peername)
       that.emit('disconnect', peer.host, peer.port)
+
+      delete peers[peername];
+
+      if (that._isReady && Object.keys(peers).length < min) {
+        debug('NOT READT EVENT %s', id)
+        that._isReady = false;
+        that.emit('notready');
+      }
     })
+  }
+
+
+  if (opts.minConcensus == 0) {
+    debug('READY EVENT %s', id);
+    this._isReady = true;
+    this.emit('ready');
   }
 
 
@@ -261,3 +276,4 @@ var Replicator = module.exports = function Replicator(db, opts) {
 }
 
 inherits(Replicator, Emitter)
+
