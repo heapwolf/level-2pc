@@ -77,7 +77,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
   db.del = function del(key, cb) {
 
     if (key.indexOf(ttlk) == 0)
-      return del.apply(localdb, arguments)
+      return _db.del.apply(_db, arguments)
 
     queue(function() {
       _db.del(prefix + key, function(err) {
@@ -108,7 +108,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
   db.batch = function batch(arr, opts, cb) {
     if (arr[0] && arr[0].key.indexOf(ttlk) == 0)
-      return db.batch.apply(localdb, arguments)
+      return _db.batch.apply(_db, arguments)
 
     if ('function' == typeof opts) {
       cb = opts
