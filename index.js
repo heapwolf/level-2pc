@@ -148,8 +148,8 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
           debug('FAILURE EVENT @%s', peer)
 
-          if (opts.minConcensus && ++failures == opts.minConcensus) {
-            return cb(new Error('minimum concensus failed'))
+          if (opts.minConsensus && ++failures == opts.minConsensus) {
+            return cb(new Error('minimum consensus failed'))
           }
         }
         else if (err) {
@@ -192,7 +192,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
     debug('REPLICATION EVENT @%s', id)
 
-    var len = opts.minConcensus || Object.keys(peers).length
+    var len = opts.minConsensus || Object.keys(peers).length
     if (!len || len == 0) return db.commit(op, cb)
 
     quorumPhase(op, len, function quorumPhaseCallback(err) {
@@ -205,7 +205,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port
-    var min = opts.minConcensus || opts.peers.length
+    var min = opts.minConsensus || opts.peers.length
     var client = createClient(opts)
 
     client.connect(peer.port, peer.host)
@@ -252,7 +252,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
   }
 
 
-  if (opts.minConcensus == 0) {
+  if (opts.minConsensus == 0) {
     debug('READY EVENT %s', id);
     this._isReady = true;
     this.emit('ready');
