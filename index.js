@@ -1,25 +1,20 @@
 var rpc = require('rpc-stream')
 var createClient = require('./client')
-var ttl = require('level-ttl')
 var xtend = require('xtend')
 var debug = require('debug')('level2pc')
 var inherits = require('inherits')
 var Emitter = require('events').EventEmitter
 
 var prefix = '\xffxxl\xff'
-var ttlk = '\xffttl\xff'
-var HR1 = { ttl: 1000 * 60 * 60 }
 
 var Replicator = module.exports = function Replicator(db, opts) {
 
   if (!(this instanceof Replicator)) return new Replicator(db, opts)
   Emitter.call(this)
 
-  ttl(db)
+  this._isReady = false;
 
-  var that = this
-  this._isReady
-
+  var that = this;
   var id = opts.host + ':' + opts.port
   var peers = {}
   var connections = {}
@@ -40,7 +35,6 @@ var Replicator = module.exports = function Replicator(db, opts) {
     debug('QUORUM @%d [%j]', opts.port, op)
 
     op.opts = op.opts || {}
-    op.opts.ttl = opts.ttl || HR1
 
     if (op.type == 'batch') {
       _db.batch(prefixOps(op.value), op.opts, cb)
@@ -76,7 +70,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
   db.del = function del(key, cb) {
 
-    if (key.indexOf(ttlk) == 0)
+    if (key.indexOf(prefix) == 0)
       return _db.del.apply(_db, arguments)
 
     queue(function() {
@@ -107,7 +101,8 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
 
   db.batch = function batch(arr, opts, cb) {
-    if (arr[0] && arr[0].key.indexOf(ttlk) == 0)
+
+    if (arr[0] && arr[0].key.indexOf(prefix) == 0)
       return _db.batch.apply(_db, arguments)
 
     if ('function' == typeof opts) {
@@ -116,7 +111,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
     }
 
     queue(function() {
-      _db.batch(prefixOps(arr, true), opts, function(err) {
+      _db.batch(prefixOps(arr), opts, function(err) {
         var op = { type: 'batch', value: arr }
         replicate(op, cb)
       })
@@ -153,8 +148,8 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
           debug('FAILURE EVENT @%s', peer)
 
-          if (opts.minConcensus && ++failures == opts.minConcensus) {
-            return cb(new Error('minimum concensus failed'))
+          if (opts.minConsensus && ++failures == opts.minConsensus) {
+            return cb(new Error('minimum consensus failed'))
           }
         }
         else if (err) {
@@ -197,8 +192,9 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
     debug('REPLICATION EVENT @%s', id)
 
-    var len = Object.keys(peers).length
-    if (!len) return cb(null)
+    var len = opts.minConsensus || Object.keys(peers).length
+    if (!len || len == 0) return db.commit(op, cb)
+
     quorumPhase(op, len, function quorumPhaseCallback(err) {
       if (err) return cb(err)
       db.commit(op, cb)
@@ -209,7 +205,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port
-    var min = opts.minConcensus || opts.peers.length
+    var min = opts.minConsensus || opts.peers.length
     var client = createClient(opts)
 
     client.connect(peer.port, peer.host)
@@ -234,7 +230,6 @@ var Replicator = module.exports = function Replicator(db, opts) {
       peers[peername] = remote
 
       that.emit('connect', peer.host, peer.port)
-      
       if (Object.keys(peers).length >= min) {
         debug('READY EVENT %s', id);
         that._isReady = true
@@ -245,7 +240,22 @@ var Replicator = module.exports = function Replicator(db, opts) {
     client.on('disconnect', function onDisconnect() {
       debug('DISCONNECT EVENT %s -> %s', id, peername)
       that.emit('disconnect', peer.host, peer.port)
+
+      delete peers[peername];
+
+      if (that._isReady && Object.keys(peers).length < min) {
+        debug('NOT READT EVENT %s', id)
+        that._isReady = false;
+        that.emit('notready');
+      }
     })
+  }
+
+
+  if (opts.minConsensus == 0) {
+    debug('READY EVENT %s', id);
+    this._isReady = true;
+    this.emit('ready');
   }
 
 
