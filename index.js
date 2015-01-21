@@ -229,6 +229,10 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port
+
+    if (typeof peers[peername] != 'undefined')
+      return;
+
     var min = repl_opts.minConsensus || repl_opts.peers.length
     var client = createClient(repl_opts)
 
@@ -252,6 +256,10 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       remote = r.wrap(db)
       r.pipe(s).pipe(r)
       peers[peername] = remote
+
+      Object.keys(peers).map(function(p) {
+        peers[p].addPeer({host: repl_opts.host, port: repl_opts.port});
+      })
 
       that.emit('connect', peer.host, peer.port)
       if (Object.keys(peers).length >= min) {
