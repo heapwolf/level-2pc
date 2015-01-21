@@ -53,7 +53,7 @@ function createData(prefix, size, type) {
 
 test('more than two peers', function(t) {
 
-  var i = 8
+  var i = 11
   var dbs = {}
   var rs = {}
   var servers = {}
@@ -316,6 +316,59 @@ test('more than two peers', function(t) {
       })
 
     }, Math.ceil(Math.random()*base))
+
+  })
+
+  test('peer discovery -- peer joins later on', function(t) {
+
+    rs.r9 = Replicator(dbs.db9, createOpts(3009, [3010], 1))
+
+    servers.r9 = net.createServer(function(con) {
+      var server = rs.r9.createServer()
+      server.pipe(con).pipe(server)
+    }).listen(3009)
+
+    rs.r10 = Replicator(dbs.db10, createOpts(3010, [3009], 1))
+    
+    servers.r10 = net.createServer(function(con) {
+      var server = rs.r10.createServer()
+      server.pipe(con).pipe(server)
+    }).listen(3010)
+
+
+    dbs.db9.put('test1key', 'test1value', function(err) {
+      t.ok(!err)
+      dbs.db10.get('test1key', function(err) {
+        t.ok(!err);
+      })
+    })
+
+    setTimeout(function() {
+
+      rs.r11 = Replicator(dbs.db11, createOpts(3011, [3009, 3010], 1))
+      
+      servers.r11 = net.createServer(function(con) {
+        var server = rs.r11.createServer()
+        server.pipe(con).pipe(server)
+
+      }).listen(3011)
+
+      dbs.db11.put('test2key', 'test2value', function(err) {
+        t.ok(!err)
+
+        //
+        // after it's been put into dbs.db8 it should be everywhere
+        //
+        dbs.db9.get('test2key', function(err) {
+          t.ok(!err)
+          dbs.db10.get('test2key', function(err) {
+            t.ok(!err)
+            t.end();
+          })
+        })
+      })
+
+    }, Math.ceil(Math.random()*1000))
 
   })
 
