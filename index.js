@@ -230,7 +230,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 
     var peername = peer.host + ':' + peer.port
 
-    if (typeof peers[peername] != 'undefined')
+    if (typeof connections[peername] != 'undefined')
       return;
 
     var min = repl_opts.minConsensus || repl_opts.peers.length
@@ -259,7 +259,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 
       Object.keys(peers).map(function(p) {
         peers[p].addPeer({host: repl_opts.host, port: repl_opts.port});
-      })
+      });
 
       that.emit('connect', peer.host, peer.port)
       if (Object.keys(peers).length >= min) {
@@ -282,7 +282,6 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       }
     })
   }
-
 
   if (repl_opts.minConsensus == 0) {
     debug('READY EVENT %s', id);
