@@ -21,12 +21,19 @@ function createOpts(localport, ports, min, failAfter) {
 }
 
 
-function createData(prefix, size) {
+function createData(prefix, size, type) {
 
   var map = function() { 
-    return {
-      key: prefix + Math.random().toString(15).slice(-256),
-      value: Math.random().toString(15)
+    if (type == 'json') {
+      return {
+        key: prefix + Math.random().toString(15).slice(-256),
+        value: { string: Math.random().toString(15) }
+      }
+    } else {
+      return {
+        key: prefix + Math.random().toString(15).slice(-256),
+        value: Math.random().toString(15)
+      }
     }
   }
 
@@ -53,7 +60,7 @@ test('more than two peers', function(t) {
 
   while(i > 0) {
     rmrf.sync('./db' + i)
-    dbs['db' + i] = level('./db' + i, { valueEncoding: 'json' })
+    dbs['db' + i] = level('./db' + i, { keyEncoding: 'utf8', valueEncoding: 'utf8' })
     i--
   }
 
@@ -99,7 +106,7 @@ test('more than two peers', function(t) {
 
     records.forEach(function(record) {
 
-      dbs.db1.put(record.key, record.value, function(err) {
+      dbs.db1.put(record.key, record.value, { valueEncoding: 'utf8' }, function(err) {
         t.ok(!err)
 
         //
@@ -312,7 +319,46 @@ test('more than two peers', function(t) {
 
   })
 
+  test('random set of json encoded records pass', function(t) {
 
+    var size = 2
+    var index = 0
+    var records = createData('C_', size, 'json')
+
+    records.forEach(function(record) {
+
+      dbs.db1.put(record.key, record.value, { keyEncoding: 'utf8', valueEncoding: 'json' }, function(err) {
+        t.ok(!err)
+
+        //
+        // after the last record is put, all records should be in the database.
+        //
+
+        if (++index == records.length) {
+          [dbs.db1, dbs.db2, dbs.db3].forEach(verifyRecords)
+        }
+      })
+    })
+
+    function verifyRecords(db, index) {
+
+      var results = []
+      var count = 0
+
+      db.createReadStream({ gte: 'C_', lte: 'C_~', valueEncoding: 'json' })
+        .on('data', function(r) {
+          ++count
+          results.push(r)
+        })
+        .on('end', function() {
+          t.equal(count, records.length)
+          t.equal(
+            JSON.stringify(results), JSON.stringify(records)
+          )
+          if (index == 1) return t.end() 
+        })
+    }
+  });
 
   test('when the databases closes, the replicator disconnects from its peers', function(t) {
 

@@ -7,15 +7,15 @@ var Emitter = require('events').EventEmitter
 
 var prefix = '\xffxxl\xff'
 
-var Replicator = module.exports = function Replicator(db, opts) {
+var Replicator = module.exports = function Replicator(db, repl_opts) {
 
-  if (!(this instanceof Replicator)) return new Replicator(db, opts)
+  if (!(this instanceof Replicator)) return new Replicator(db, repl_opts)
   Emitter.call(this)
 
   this._isReady = false;
 
   var that = this;
-  var id = opts.host + ':' + opts.port
+  var id = repl_opts.host + ':' + repl_opts.port
   var peers = {}
   var connections = {}
   var _db = {}
@@ -32,7 +32,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
 
   db.quorum = function quorum(op, cb) {
-    debug('QUORUM @%d [%j]', opts.port, op)
+    debug('QUORUM @%d [%j]', repl_opts.port, op)
 
     op.opts = op.opts || {}
 
@@ -49,6 +49,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
 
   db.commit = function commit(op, cb) {
+    op.opts = op.opts || {};
 
     if (op.type == 'batch') {
       op.value.forEach(function(o) {
@@ -58,11 +59,17 @@ var Replicator = module.exports = function Replicator(db, opts) {
     else {
       op.value = [
         { type: 'del', key: prefix + op.key },
-        { type: op.type, key: op.key, value: op.value }
+        { 
+          type: op.type,
+          key: op.key,
+          value: op.value,
+          keyEncoding: op.keyEncoding || db.options.keyEncoding || 'utf8',
+          valueEncoding: op.valueEncoding || db.options.valueEncoding || 'utf8'
+        }
       ]
     }
 
-    debug('COMMIT @%d [%j]', opts.port, op.value)
+    debug('COMMIT @%d [%j]', repl_opts.port, op.value)
 
     _db.batch(op.value, op.opts, cb)
   }
@@ -93,7 +100,15 @@ var Replicator = module.exports = function Replicator(db, opts) {
     queue(function() {
       _db.put(prefix + key, value, opts, function(err) {
         if (err) return cb(err)
-        var op = { type: 'put', key: key, value: value, opts: opts }
+
+        var op = {
+          type: 'put',
+          key: key,
+          value: value,
+          keyEncoding: opts.keyEncoding || db.options.keyEncoding || 'utf8',
+          valueEncoding: opts.valueEncoding || db.options.valueEncoding || 'utf8'
+        };
+
         replicate(op, cb)
       })
     })
@@ -112,6 +127,13 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
     queue(function() {
       _db.batch(prefixOps(arr), opts, function(err) {
+        arr.map(function(a) {
+          if (a.type == 'put') {
+            a.keyEncoding = a.keyEncoding || opts.keyEncoding || 'utf8';
+            a.valueEncoding = a.valueEncoding || opts.valueEncoding || 'utf8';
+          }
+        });
+
         var op = { type: 'batch', value: arr }
         replicate(op, cb)
       })
@@ -130,7 +152,9 @@ var Replicator = module.exports = function Replicator(db, opts) {
       ops.push({ 
         key: prefix + op.key, 
         value: op.value, 
-        type: op.type 
+        type: op.type,
+        keyEncoding: 'utf8',
+        valueEncoding: 'utf8'
       })
     })
     return ops
@@ -148,7 +172,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
           debug('FAILURE EVENT @%s', peer)
 
-          if (opts.minConsensus && ++failures == opts.minConsensus) {
+          if (repl_opts.minConsensus && ++failures == repl_opts.minConsensus) {
             return cb(new Error('minimum consensus failed'))
           }
         }
@@ -192,7 +216,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
     debug('REPLICATION EVENT @%s', id)
 
-    var len = opts.minConsensus || Object.keys(peers).length
+    var len = repl_opts.minConsensus || Object.keys(peers).length
     if (!len || len == 0) return db.commit(op, cb)
 
     quorumPhase(op, len, function quorumPhaseCallback(err) {
@@ -205,8 +229,8 @@ var Replicator = module.exports = function Replicator(db, opts) {
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port
-    var min = opts.minConsensus || opts.peers.length
-    var client = createClient(opts)
+    var min = repl_opts.minConsensus || repl_opts.peers.length
+    var client = createClient(repl_opts)
 
     client.connect(peer.port, peer.host)
     connections[peername] = client
@@ -252,14 +276,14 @@ var Replicator = module.exports = function Replicator(db, opts) {
   }
 
 
-  if (opts.minConsensus == 0) {
+  if (repl_opts.minConsensus == 0) {
     debug('READY EVENT %s', id);
     this._isReady = true;
     this.emit('ready');
   }
 
 
-  opts.peers.forEach(connect)
+  repl_opts.peers.forEach(connect)
 
 
   this.close = function closeServer() {
@@ -276,4 +300,3 @@ var Replicator = module.exports = function Replicator(db, opts) {
 }
 
 inherits(Replicator, Emitter)
-
