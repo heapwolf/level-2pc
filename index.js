@@ -63,8 +63,8 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
           type: op.type,
           key: op.key,
           value: op.value,
-          keyEncoding: op.keyEncoding || 'utf8',
-          valueEncoding: op.valueEncoding || 'utf8'
+          keyEncoding: op.keyEncoding || db.options.keyEncoding || 'utf8',
+          valueEncoding: op.valueEncoding || db.options.valueEncoding || 'utf8'
         }
       ]
     }
@@ -105,8 +105,8 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
           type: 'put',
           key: key,
           value: value,
-          keyEncoding: opts.keyEncoding || 'utf8',
-          valueEncoding: opts.valueEncoding || 'utf8'
+          keyEncoding: opts.keyEncoding || db.options.keyEncoding || 'utf8',
+          valueEncoding: opts.valueEncoding || db.options.valueEncoding || 'utf8'
         };
 
         replicate(op, cb)
