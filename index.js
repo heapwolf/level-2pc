@@ -172,8 +172,8 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 
           debug('FAILURE EVENT @%s', peer)
 
-          if (repl_opts.minConcensus && ++failures == repl_opts.minConcensus) {
-            return cb(new Error('minimum concensus failed'))
+          if (repl_opts.minConsensus && ++failures == repl_opts.minConsensus) {
+            return cb(new Error('minimum consensus failed'))
           }
         }
         else if (err) {
@@ -216,7 +216,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 
     debug('REPLICATION EVENT @%s', id)
 
-    var len = repl_opts.minConcensus || Object.keys(peers).length
+    var len = repl_opts.minConsensus || Object.keys(peers).length
     if (!len || len == 0) return db.commit(op, cb)
 
     quorumPhase(op, len, function quorumPhaseCallback(err) {
@@ -229,7 +229,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port
-    var min = repl_opts.minConcensus || repl_opts.peers.length
+    var min = repl_opts.minConsensus || repl_opts.peers.length
     var client = createClient(repl_opts)
 
     client.connect(peer.port, peer.host)
@@ -276,7 +276,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
   }
 
 
-  if (repl_opts.minConcensus == 0) {
+  if (repl_opts.minConsensus == 0) {
     debug('READY EVENT %s', id);
     this._isReady = true;
     this.emit('ready');
