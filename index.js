@@ -7,15 +7,15 @@ var Emitter = require('events').EventEmitter
 
 var prefix = '\xffxxl\xff'
 
-var Replicator = module.exports = function Replicator(db, opts) {
+var Replicator = module.exports = function Replicator(db, repl_opts) {
 
-  if (!(this instanceof Replicator)) return new Replicator(db, opts)
+  if (!(this instanceof Replicator)) return new Replicator(db, repl_opts)
   Emitter.call(this)
 
   this._isReady = false;
 
   var that = this;
-  var id = opts.host + ':' + opts.port
+  var id = repl_opts.host + ':' + repl_opts.port
   var peers = {}
   var connections = {}
   var _db = {}
@@ -32,7 +32,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
 
   db.quorum = function quorum(op, cb) {
-    debug('QUORUM @%d [%j]', opts.port, op)
+    debug('QUORUM @%d [%j]', repl_opts.port, op)
 
     op.opts = op.opts || {}
 
@@ -49,7 +49,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
 
   db.commit = function commit(op, cb) {
-    op.opts = opt.opts || {};
+    op.opts = op.opts || {};
 
     if (op.type == 'batch') {
       op.value.forEach(function(o) {
@@ -69,7 +69,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
       ]
     }
 
-    debug('COMMIT @%d [%j]', opts.port, op.value)
+    debug('COMMIT @%d [%j]', repl_opts.port, op.value)
 
     _db.batch(op.value, op.opts, cb)
   }
@@ -172,7 +172,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
           debug('FAILURE EVENT @%s', peer)
 
-          if (opts.minConcensus && ++failures == opts.minConcensus) {
+          if (repl_opts.minConcensus && ++failures == repl_opts.minConcensus) {
             return cb(new Error('minimum concensus failed'))
           }
         }
@@ -216,7 +216,7 @@ var Replicator = module.exports = function Replicator(db, opts) {
 
     debug('REPLICATION EVENT @%s', id)
 
-    var len = opts.minConcensus || Object.keys(peers).length
+    var len = repl_opts.minConcensus || Object.keys(peers).length
     if (!len || len == 0) return db.commit(op, cb)
 
     quorumPhase(op, len, function quorumPhaseCallback(err) {
@@ -229,8 +229,8 @@ var Replicator = module.exports = function Replicator(db, opts) {
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port
-    var min = opts.minConcensus || opts.peers.length
-    var client = createClient(opts)
+    var min = repl_opts.minConcensus || repl_opts.peers.length
+    var client = createClient(repl_opts)
 
     client.connect(peer.port, peer.host)
     connections[peername] = client
@@ -276,14 +276,14 @@ var Replicator = module.exports = function Replicator(db, opts) {
   }
 
 
-  if (opts.minConcensus == 0) {
+  if (repl_opts.minConcensus == 0) {
     debug('READY EVENT %s', id);
     this._isReady = true;
     this.emit('ready');
   }
 
 
-  opts.peers.forEach(connect)
+  repl_opts.peers.forEach(connect)
 
 
   this.close = function closeServer() {
