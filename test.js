@@ -59,8 +59,8 @@ test('more than two peers', function(t) {
   var servers = {}
 
   while(i > 0) {
-    rmrf.sync('./db' + i)
-    dbs['db' + i] = level('./db' + i, { keyEncoding: 'utf8', valueEncoding: 'utf8' })
+    rmrf.sync('./test/db' + i)
+    dbs['db' + i] = level('./test/db' + i, { keyEncoding: 'utf8', valueEncoding: 'utf8' })
     i--
   }
 
