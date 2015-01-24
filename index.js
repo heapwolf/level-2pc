@@ -31,20 +31,15 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
   }
 
 
-  db.quorum = function quorum(op, cb) {
-    debug('QUORUM @%d [%j]', repl_opts.port, op)
+  db.quorum = function quorum(cb) {
+    debug('QUORUM @%d [%j]', repl_opts.port)
 
-    op.opts = op.opts || {}
-
-    if (op.type == 'batch') {
-      _db.batch(prefixOps(op.value), op.opts, cb)
-    }
-    else if (op.type == 'put') {
-      _db.put(prefix + op.key, op.value, op.opts, cb)
-    }
-    else if (op.type == 'del') {
-      _db.del(prefix + op.key, cb)
-    }
+    //
+    // the purpose of the quorum step is to deterime if the 
+    // database is capable of reposonding successfully to operations.
+    //
+    var testkey = prefix + prefix + 'q'
+    _db.put(testkey, 1, cb)
   }
 
 
@@ -167,7 +162,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 
     for (var peer in peers) {
 
-      peers[peer].quorum(op, function quorumCallback(err) {
+      peers[peer].quorum(function quorumCallback(err) {
         if (err && err.message == 'Database is not open') {
 
           debug('FAILURE EVENT @%s', peer)
@@ -311,3 +306,4 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 }
 
 inherits(Replicator, Emitter)
+
