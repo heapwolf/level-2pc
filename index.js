@@ -247,16 +247,16 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       that.emit('reconnect', peer.host, peer.port)
     })
 
-    client.on('connect', function onConnect(s) {
+    client.on('connect', function onConnect(con) {
       
       debug('CONNECT EVENT %s -> %s', id,  peername)
 
-      var r = rpc()
-      remote = r.wrap(db)
-      r.pipe(s).pipe(r)
+      var client = rpc()
+      var remote = client.wrap(db)
+      client.pipe(con).pipe(client)
       peers[peername] = remote
 
-      Object.keys(peers).map(function(p) {
+      Object.keys(peers).forEach(function(p) {
         peers[p].addPeer({host: repl_opts.host, port: repl_opts.port});
       });
 
