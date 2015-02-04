@@ -144,9 +144,9 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
   function prefixOps(arr) {
     var ops = []
     arr.map(function opsMap(op) {
-      ops.push({ 
-        key: prefix + op.key, 
-        value: op.value, 
+      ops.push({
+        key: prefix + op.key,
+        value: op.value,
         type: op.type,
         keyEncoding: 'utf8',
         valueEncoding: 'utf8'
@@ -221,6 +221,14 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
   }
 
 
+  function ready(isReady) {
+    if (isReady) debug('READY EVENT %s', id)
+    else debug('NOT READY EVENT %s', id)
+    that._isReady = isReady
+    that.emit(isReady ? 'ready' : 'notready')
+  }
+
+
   function connect(peer, index) {
 
     var peername = peer.host + ':' + peer.port
@@ -244,7 +252,6 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
     })
 
     client.on('connect', function onConnect(con) {
-      
       debug('CONNECT EVENT %s -> %s', id,  peername)
 
       var client = rpc()
@@ -257,10 +264,8 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       });
 
       that.emit('connect', peer.host, peer.port)
-      if (Object.keys(peers).length >= min) {
-        debug('READY EVENT %s', id);
-        that._isReady = true
-        that.emit('ready')
+      if (!that._isReady && Object.keys(peers).length >= min) {
+        ready(true)
       }
     })
 
@@ -271,17 +276,13 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       delete peers[peername];
 
       if (that._isReady && Object.keys(peers).length < min) {
-        debug('NOT READT EVENT %s', id)
-        that._isReady = false;
-        that.emit('notready');
+        ready(false)
       }
     })
   }
 
   if (repl_opts.minConsensus == 0) {
-    debug('READY EVENT %s', id);
-    this._isReady = true;
-    this.emit('ready');
+    ready(true)
   }
 
 
