@@ -237,10 +237,6 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
     client.on('fail', function() {
       that.emit('fail', peer.host, peer.port)
     })
-    
-    client.on('error', function(err) {
-      that.emit('error', err);
-    });
 
     client.on('reconnect', function() {
       debug('RECONNECT EVENT %s -> %s', id, peername)
