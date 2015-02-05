@@ -18,6 +18,7 @@
     "p2p"
   ],
   "author": "hij1nx",
+  "homepage": "https://github.com/hij1nx/level-2pc",
   "license": "MIT",
   "dependencies": {
     "debug": "^2.1.1",
