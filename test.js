@@ -53,7 +53,7 @@ function createData(prefix, size, type) {
 
 test('more than two peers', function(t) {
 
-  var i = 11
+  var i = 14
   var dbs = {}
   var rs = {}
   var servers = {}
@@ -183,7 +183,6 @@ test('more than two peers', function(t) {
 
 
   test('that a single record is added to all peers before returning the callback', function(t) {
-    
     dbs.db1.put('test1key', 'test1value', function(err) {
       t.ok(!err, 'key added to the coordinator and all other peers')
       dbs.db2.get('test1key', function(err) {
@@ -278,7 +277,7 @@ test('more than two peers', function(t) {
     setTimeout(function() {
 
       rs.r7 = Replicator(dbs.db7, createOpts(3007, [3006, 3008], 2))
-      
+
       servers.r7 = net.createServer(function(con) {
         var server = rs.r7.createServer()
         server.pipe(con).pipe(server)
@@ -290,7 +289,7 @@ test('more than two peers', function(t) {
     setTimeout(function() {
 
       rs.r8 = Replicator(dbs.db8, createOpts(3008, [3006, 3007], 2))
-      
+
       servers.r8 = net.createServer(function(con) {
         var server = rs.r8.createServer()
         server.pipe(con).pipe(server)
@@ -329,7 +328,7 @@ test('more than two peers', function(t) {
     }).listen(3009)
 
     rs.r10 = Replicator(dbs.db10, createOpts(3010, [3009], 1))
-    
+
     servers.r10 = net.createServer(function(con) {
       var server = rs.r10.createServer()
       server.pipe(con).pipe(server)
@@ -346,7 +345,7 @@ test('more than two peers', function(t) {
     setTimeout(function() {
 
       rs.r11 = Replicator(dbs.db11, createOpts(3011, [3009, 3010], 1))
-      
+
       servers.r11 = net.createServer(function(con) {
         var server = rs.r11.createServer()
         server.pipe(con).pipe(server)
@@ -407,6 +406,75 @@ test('more than two peers', function(t) {
           cb()
         })
     }
+  })
+
+  test('closed peers should not try to reconnect if missing failAfter', function(t) {
+    var opts12 = createOpts(3012, [3013], 1)
+    delete opts12.failAfter
+    var r12 = Replicator(dbs.db12, opts12)
+
+    var opts13 = createOpts(3013, [3012], 1)
+    delete opts13.failAfter
+    var r13 = Replicator(dbs.db13, opts13)
+
+    var s12 = net.createServer(function(con) {
+      var server = r12.createServer()
+      server.pipe(con).pipe(server)
+    }).listen(3012)
+
+    var s13 = net.createServer(function(con) {
+      var server = r13.createServer()
+      server.pipe(con).pipe(server)
+    }).listen(3013)
+
+    var ready = after(2, thirdPeer)
+
+    function thirdPeer(err) {
+      t.ok(!err)
+
+      var opts14 = createOpts(3014, [3012, 3013], 2)
+      delete opts14.failAfter
+      var r14 = Replicator(dbs.db14, opts14)
+
+      var s14 = net.createServer(function(con) {
+        var server = r14.createServer()
+        server.pipe(con).pipe(server)
+      }).listen(3014)
+
+      var reconnectAttempts = 0
+      function attemptedReconnect() { ++reconnectAttempts }
+
+      r12.on('reconnect', attemptedReconnect)
+      r13.on('reconnect', attemptedReconnect)
+      r14.on('reconnect', attemptedReconnect)
+
+      r14.once('ready', function () {
+
+        var notready = after(3, function (err) {
+          t.ok(!err, 'no error')
+          setTimeout(function () {
+            t.equal(reconnectAttempts, 0, 'no attempts to reconnect')
+            t.end()
+          }, 500)
+        })
+
+        r12.once('notready', notready)
+        r13.once('notready', notready)
+        r14.once('notready', notready)
+
+        s12.close()
+        s13.close()
+        s14.close()
+
+        r12.close()
+        r13.close()
+        r14.close()
+
+      })
+    }
+
+    r12.once('ready', ready)
+    r13.once('ready', ready)
   })
 
   test('when the databases closes, the replicator disconnects from its peers', function(t) {

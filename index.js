@@ -7,14 +7,14 @@ var Emitter = require('events').EventEmitter
 
 var prefix = '\xffxxl\xff'
 
-var Replicator = module.exports = function Replicator(db, repl_opts) {
+function Replicator(db, repl_opts) {
 
   if (!(this instanceof Replicator)) return new Replicator(db, repl_opts)
   Emitter.call(this)
 
-  this._isReady = false;
+  this._isReady = false
 
-  var that = this;
+  var that = this
   var id = repl_opts.host + ':' + repl_opts.port
   var peers = {}
   var connections = {}
@@ -35,7 +35,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
     debug('QUORUM @%d [%j]', repl_opts.port)
 
     //
-    // the purpose of the quorum step is to deterime if the 
+    // the purpose of the quorum step is to determine if the
     // database is capable of reposonding successfully to operations.
     //
     var testkey = prefix + prefix + 'q'
@@ -44,7 +44,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 
 
   db.commit = function commit(op, cb) {
-    op.opts = op.opts || {};
+    op.opts = op.opts || {}
 
     if (op.type == 'batch') {
       op.value.forEach(function(o) {
@@ -54,7 +54,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
     else {
       op.value = [
         { type: 'del', key: prefix + op.key },
-        { 
+        {
           type: op.type,
           key: op.key,
           value: op.value,
@@ -102,7 +102,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
           value: value,
           keyEncoding: opts.keyEncoding || db.options.keyEncoding || 'utf8',
           valueEncoding: opts.valueEncoding || db.options.valueEncoding || 'utf8'
-        };
+        }
 
         replicate(op, cb)
       })
@@ -124,10 +124,10 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       _db.batch(prefixOps(arr), opts, function(err) {
         arr.map(function(a) {
           if (a.type == 'put') {
-            a.keyEncoding = a.keyEncoding || opts.keyEncoding || 'utf8';
-            a.valueEncoding = a.valueEncoding || opts.valueEncoding || 'utf8';
+            a.keyEncoding = a.keyEncoding || opts.keyEncoding || 'utf8'
+            a.valueEncoding = a.valueEncoding || opts.valueEncoding || 'utf8'
           }
-        });
+        })
 
         var op = { type: 'batch', value: arr }
         replicate(op, cb)
@@ -229,12 +229,12 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
   }
 
 
-  function connect(peer, index) {
+  function connect(peer) {
 
     var peername = peer.host + ':' + peer.port
 
-    if (typeof connections[peername] != 'undefined')
-      return;
+    if (connections === null || typeof connections[peername] != 'undefined')
+      return
 
     var min = repl_opts.minConsensus || repl_opts.peers.length
     var client = createClient(repl_opts)
@@ -260,8 +260,8 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       peers[peername] = remote
 
       Object.keys(peers).forEach(function(p) {
-        peers[p].addPeer({host: repl_opts.host, port: repl_opts.port});
-      });
+        peers[p].addPeer({host: repl_opts.host, port: repl_opts.port})
+      })
 
       that.emit('connect', peer.host, peer.port)
       if (!that._isReady && Object.keys(peers).length >= min) {
@@ -273,7 +273,7 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
       debug('DISCONNECT EVENT %s -> %s', id, peername)
       that.emit('disconnect', peer.host, peer.port)
 
-      delete peers[peername];
+      delete peers[peername]
 
       if (that._isReady && Object.keys(peers).length < min) {
         ready(false)
@@ -290,8 +290,10 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 
 
   this.close = function closeServer() {
-    for (var client in connections) {
-      connections[client].disconnect()
+    var _connections = connections
+    connections = null
+    for (var client in _connections) {
+      _connections[client].disconnect()
     }
     peers = {}
   }
@@ -303,4 +305,6 @@ var Replicator = module.exports = function Replicator(db, repl_opts) {
 }
 
 inherits(Replicator, Emitter)
+
+module.exports = Replicator
 
