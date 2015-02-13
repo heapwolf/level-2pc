@@ -1,10 +1,10 @@
 var level = require('level-hyper')
 var net = require('net')
+var after = require('after')
 var Replicator = require('./index')
 var rmrf = require('rimraf')
 var tap = require('tap')
 var test = tap.test
-
 
 function createOpts(localport, ports, min, failAfter) {
   var peers = ports.map(function(port) {
@@ -101,26 +101,22 @@ test('more than two peers', function(t) {
   test('that a random number of records put to one peer are replicated to all other peers', function(t) {
 
     var size = 2
-    var index = 0
     var records = createData('A_', size)
 
-    records.forEach(function(record) {
-
-      dbs.db1.put(record.key, record.value, { valueEncoding: 'utf8' }, function(err) {
-        t.ok(!err)
-
-        //
-        // after the last record is put, all records should be in the database.
-        //
-
-        if (++index == records.length) {
-          [dbs.db1, dbs.db2, dbs.db3].forEach(verifyRecords)
-        }
+    var done = after(records.length, function (err) {
+      t.ok(!err)
+      var databases = [dbs.db1, dbs.db2, dbs.db3]
+      var done2 = after(databases.length, t.end.bind(t))
+      databases.forEach(function (db) {
+        verifyRecords(db, done2)
       })
     })
 
-    function verifyRecords(db, index) {
+    records.forEach(function(record) {
+      dbs.db1.put(record.key, record.value, { valueEncoding: 'utf8' }, done)
+    })
 
+    function verifyRecords(db, cb) {
       var results = []
       var count = 0
 
@@ -130,13 +126,14 @@ test('more than two peers', function(t) {
           results.push(r)
         })
         .on('end', function() {
-          t.equal(count, records.length)
+          t.equal(count, records.length, 'equal #1')
           t.equal(
-            JSON.stringify(results), JSON.stringify(records)
+            JSON.stringify(results), JSON.stringify(records), 'equal #2'
           )
-          if (index == 1) return t.end() 
+          cb()
         })
     }
+
   })
 
 
@@ -151,21 +148,24 @@ test('more than two peers', function(t) {
     var records = createData('B_', size)
     var groups = chunk(records, 2)
 
-    groups.forEach(function(group, index) {
+    var done = after(groups.length, function (err) {
+      t.ok(!err)
+      var databases = [dbs.db2, dbs.db3]
+      var done2 = after(databases.length, t.end.bind(t))
+      databases.forEach(function (db) {
+        verifyRecords(db, done2)
+      })
+    })
+
+    groups.forEach(function(group) {
       var newgroup = []
       group.forEach(function(op) {
         newgroup.push({ type: 'put', key: op.key, value: op.value })
       })
-
-      dbs.db1.batch(newgroup, function(err) {
-        t.ok(!err)
-        if (index == groups.length-1) {
-          [dbs.db2, dbs.db3].forEach(verifyRecords)
-        }
-      })
+      dbs.db1.batch(newgroup, done)
     })
 
-    function verifyRecords(db, index) {
+    function verifyRecords(db, cb) {
       var results = []
       db.createReadStream({ gte: 'B_', lte: 'B_~' })
         .on('data', function(r) {
@@ -173,9 +173,9 @@ test('more than two peers', function(t) {
         })
         .on('end', function() {
           t.equal(
-            JSON.stringify(results), JSON.stringify(records)
+            JSON.stringify(results), JSON.stringify(records), 'equal #3'
           )
-          if (index == 1) return t.end() 
+          cb()
         })
     }
   })
@@ -375,26 +375,22 @@ test('more than two peers', function(t) {
   test('random set of json encoded records pass', function(t) {
 
     var size = 2
-    var index = 0
     var records = createData('C_', size, 'json')
 
-    records.forEach(function(record) {
-
-      dbs.db1.put(record.key, record.value, { keyEncoding: 'utf8', valueEncoding: 'json' }, function(err) {
-        t.ok(!err)
-
-        //
-        // after the last record is put, all records should be in the database.
-        //
-
-        if (++index == records.length) {
-          [dbs.db1, dbs.db2, dbs.db3].forEach(verifyRecords)
-        }
+    var done = after(records.length, function (err) {
+      t.ok(!err)
+      var databases = [dbs.db1, dbs.db2, dbs.db3]
+      var done2 = after(databases.length, t.end.bind(t))
+      databases.forEach(function (db) {
+        verifyRecords(db, done2)
       })
     })
 
-    function verifyRecords(db, index) {
+    records.forEach(function(record) {
+      dbs.db1.put(record.key, record.value, { keyEncoding: 'utf8', valueEncoding: 'json' }, done)
+    })
 
+    function verifyRecords(db, cb) {
       var results = []
       var count = 0
 
@@ -404,24 +400,28 @@ test('more than two peers', function(t) {
           results.push(r)
         })
         .on('end', function() {
-          t.equal(count, records.length)
+          t.equal(count, records.length, 'equal #4')
           t.equal(
-            JSON.stringify(results), JSON.stringify(records)
+            JSON.stringify(results), JSON.stringify(records), 'equal #5'
           )
-          if (index == 1) return t.end() 
+          cb()
         })
     }
-  });
+  })
 
   test('when the databases closes, the replicator disconnects from its peers', function(t) {
+
+    var done = after(Object.keys(servers).length, function (err) {
+      t.ok(!err, 'no error')
+      t.end()
+    })
 
     for (var r in rs)
       rs[r].close()
 
     for(var s in servers)
-      servers[s].close()
+      servers[s].close(done)
 
-    t.end()
   })
 
   t.end()
