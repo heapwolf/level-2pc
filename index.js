@@ -264,9 +264,11 @@ function Replicator(db, repl_opts) {
       })
 
       that.emit('connect', peer.host, peer.port)
+
       if (!that._isReady && Object.keys(peers).length >= min) {
         ready(true)
       }
+
     })
 
     client.on('disconnect', function onDisconnect() {
@@ -275,9 +277,12 @@ function Replicator(db, repl_opts) {
 
       delete peers[peername]
 
-      if (that._isReady && Object.keys(peers).length < min) {
+      if (repl_opts.minConsensus > 0
+          && that._isReady
+          && Object.keys(peers).length < min) {
         ready(false)
       }
+
     })
   }
 
@@ -297,7 +302,6 @@ function Replicator(db, repl_opts) {
     }
     peers = {}
   }
-
 
   this.createServer = function createServer() {
     return rpc(db)

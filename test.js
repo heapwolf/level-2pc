@@ -53,7 +53,7 @@ function createData(prefix, size, type) {
 
 test('more than two peers', function(t) {
 
-  var i = 14
+  var i = 16
   var dbs = {}
   var rs = {}
   var servers = {}
@@ -475,6 +475,43 @@ test('more than two peers', function(t) {
 
     r12.once('ready', ready)
     r13.once('ready', ready)
+  })
+
+  test('peer with minConsensus 0 should always be in ready state', function(t) {
+    var peer1, peer2
+    var servers = []
+
+    var ready = after(2, function() {
+      peer1.close()
+      peer2.close()
+      servers.forEach(function(server) { server.close() })
+    })
+
+    peer1 = Replicator(dbs.db15, createOpts(3015, [3016], 0))
+
+    servers.push(net.createServer(function(con) {
+      var server = peer1.createServer()
+      server.pipe(con).pipe(server)
+    }).listen(3015))
+
+    peer1.on('ready', ready)
+    peer1.on('notready', function () {
+      t.fail('should never happen')
+    })
+
+    peer2 = Replicator(dbs.db16, createOpts(3016, [3015], 1))
+
+    servers.push(net.createServer(function(con) {
+      var server = peer2.createServer()
+      server.pipe(con).pipe(server)
+    }).listen(3016))
+
+    peer2.on('ready', ready)
+    peer2.on('notready', function() {
+      t.ok(true, 'only one notready called')
+      t.end()
+    })
+
   })
 
   test('when the databases closes, the replicator disconnects from its peers', function(t) {
