@@ -282,7 +282,7 @@ function Replicator(db, repl_opts) {
   }
 
   if (repl_opts.minConsensus == 0) {
-    ready(true)
+    process.nextTick(ready.bind(null, true))
   }
 
 
