@@ -133,7 +133,7 @@ Returns a `Replicator` object, which is an `EventEmitter`.
   * `host` host that other peers should connect to
   * `port` port that other peers should connect to
   * `peers` an array of objects that specify the host and port of each peer
-  * `minConcensus` how many peers must connect initially or respond to quorum
+  * `minConsensus` how many peers must connect initially or respond to quorum
 
 ### Replicator#createServer()
 
@@ -145,11 +145,11 @@ Closes connections to all peers.
 
 ### Event: 'ready'
 
-Emitted when the replicator is ready to replicate with other peers. Happens when the replicator has enough connections for the quorum, i.e. when the number of peers is above `minConcensus`.
+Emitted when the replicator is ready to replicate with other peers. Happens when the replicator has enough connections for the quorum, i.e. when the number of peers is above `minConsensus`.
 
 ### Event: 'notready'
 
-Emitted when the replicator is not ready to replicate with other peers. Happens when the replicator doesn't have enough connections for the quorum, i.e. when the number of peers goes below `minConcensus`.
+Emitted when the replicator is not ready to replicate with other peers. Happens when the replicator doesn't have enough connections for the quorum, i.e. when the number of peers goes below `minConsensus`.
 
 ### Event: 'connect'
 

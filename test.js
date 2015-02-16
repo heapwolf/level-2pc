@@ -14,7 +14,7 @@ function createOpts(localport, ports, min, failAfter) {
   return { 
     peers: peers,
     port: localport,
-    minConcensus: min,
+    minConsensus: min,
     failAfter: failAfter || 16,
     host: 'localhost'
   }
