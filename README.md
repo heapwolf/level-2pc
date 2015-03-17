@@ -158,9 +158,15 @@ Emitted when the replicator has connected to a peer.
 * `host` host of the connected peer
 * `port` port of the connected peer
 
+### Event: 'error'
+
+Emitted when there was an error in the connection between the replicator and a peer.
+
+* `err` error object
+
 ### Event: 'disconnect'
 
-Emitted when the replicator has diconnected from a peer.
+Emitted when the replicator has disconnected from a peer.
 
 * `host` host of the disconnected peer
 * `port` port of the disconnected peer
