@@ -8,6 +8,10 @@ module.exports = function (opts) {
     return require('net').connect.apply(null, arguments);
   });
 
-  return reconnect(opts);
+  var re = reconnect(opts, function (stream) {
+    stream.on('error', re.emit.bind(re, 'error'));
+  });
+
+  return re;
 };
 

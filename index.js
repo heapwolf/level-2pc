@@ -246,6 +246,8 @@ function Replicator(db, repl_opts) {
       that.emit('fail', peer.host, peer.port)
     })
 
+    client.on('error', that.emit.bind(that, 'error'))
+
     client.on('reconnect', function() {
       debug('RECONNECT EVENT %s -> %s', id, peername)
       that.emit('reconnect', peer.host, peer.port)
