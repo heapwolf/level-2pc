@@ -1,4 +1,4 @@
-var level = require('level-hyper')
+var level = require('level')
 var net = require('net')
 var after = require('after')
 var Replicator = require('./index')
@@ -218,8 +218,11 @@ test('more than two peers', function(t) {
     //
     // only retry 4 times in the interests of keeping the test run-time short
     //
-    rs.r4 = Replicator(dbs.db4, createOpts(3004, [3005, 3006], 2, 4))
-    rs.r5 = Replicator(dbs.db5, createOpts(3005, [3006, 3004], 2, 4))
+    rs.r4 = Replicator(dbs.db4, createOpts(3004, [3005, 3006], 2, 2))
+    rs.r5 = Replicator(dbs.db5, createOpts(3005, [3004, 3004], 2, 2))
+
+    rs.r4.on('error', function(err) {})
+    rs.r5.on('error', function(err) {})
 
     servers.r4 = net.createServer(function(con) {
       var server = rs.r4.createServer()
@@ -255,7 +258,7 @@ test('more than two peers', function(t) {
     dbs.db5.put('test1key', 'test1value', function(err) {
       t.ok(err)
     })
-  })
+  }) 
 
 
 
@@ -266,6 +269,7 @@ test('more than two peers', function(t) {
     setTimeout(function() {
 
       rs.r6 = Replicator(dbs.db6, createOpts(3006, [3007, 3008], 2))
+      rs.r6.on('error', function() {})
 
       servers.r6 = net.createServer(function(con) {
         var server = rs.r6.createServer()
@@ -277,6 +281,7 @@ test('more than two peers', function(t) {
     setTimeout(function() {
 
       rs.r7 = Replicator(dbs.db7, createOpts(3007, [3006, 3008], 2))
+      rs.r7.on('error', function() {})
 
       servers.r7 = net.createServer(function(con) {
         var server = rs.r7.createServer()
@@ -285,10 +290,11 @@ test('more than two peers', function(t) {
 
     }, Math.ceil(Math.random()*base))
 
-
     setTimeout(function() {
 
       rs.r8 = Replicator(dbs.db8, createOpts(3008, [3006, 3007], 2))
+
+      rs.r8.on('error', function() {})
 
       servers.r8 = net.createServer(function(con) {
         var server = rs.r8.createServer()
@@ -318,9 +324,11 @@ test('more than two peers', function(t) {
 
   })
 
+
   test('peer discovery -- peer joins later on', function(t) {
 
     rs.r9 = Replicator(dbs.db9, createOpts(3009, [3010], 1))
+    rs.r9.on('error', function() {})
 
     servers.r9 = net.createServer(function(con) {
       var server = rs.r9.createServer()
@@ -328,6 +336,7 @@ test('more than two peers', function(t) {
     }).listen(3009)
 
     rs.r10 = Replicator(dbs.db10, createOpts(3010, [3009], 1))
+    rs.r10.on('error', function() {})
 
     servers.r10 = net.createServer(function(con) {
       var server = rs.r10.createServer()
@@ -408,14 +417,17 @@ test('more than two peers', function(t) {
     }
   })
 
+
   test('closed peers should not try to reconnect if missing failAfter', function(t) {
     var opts12 = createOpts(3012, [3013], 1)
     delete opts12.failAfter
     var r12 = Replicator(dbs.db12, opts12)
+    r12.on('error', function() {})
 
     var opts13 = createOpts(3013, [3012], 1)
     delete opts13.failAfter
     var r13 = Replicator(dbs.db13, opts13)
+    r13.on('error', function() {})
 
     var s12 = net.createServer(function(con) {
       var server = r12.createServer()
@@ -435,6 +447,7 @@ test('more than two peers', function(t) {
       var opts14 = createOpts(3014, [3012, 3013], 2)
       delete opts14.failAfter
       var r14 = Replicator(dbs.db14, opts14)
+      r13.on('error', function() {})
 
       var s14 = net.createServer(function(con) {
         var server = r14.createServer()
@@ -477,6 +490,8 @@ test('more than two peers', function(t) {
     r13.once('ready', ready)
   })
 
+
+
   test('peer with minConsensus 0 should always be in ready state', function(t) {
     var peer1, peer2
     var servers = []
@@ -488,6 +503,7 @@ test('more than two peers', function(t) {
     })
 
     peer1 = Replicator(dbs.db15, createOpts(3015, [3016], 0))
+    peer1.on('error', function() {})
 
     servers.push(net.createServer(function(con) {
       var server = peer1.createServer()
@@ -500,6 +516,7 @@ test('more than two peers', function(t) {
     })
 
     peer2 = Replicator(dbs.db16, createOpts(3016, [3015], 1))
+    peer2.on('error', function() {})
 
     servers.push(net.createServer(function(con) {
       var server = peer2.createServer()
@@ -516,17 +533,18 @@ test('more than two peers', function(t) {
 
   test('when the databases closes, the replicator disconnects from its peers', function(t) {
 
-    var done = after(Object.keys(servers).length, function (err) {
+     var done = after(Object.keys(servers).length, function (err) {
       t.ok(!err, 'no error')
       t.end()
     })
 
-    for (var r in rs)
-      rs[r].close()
+    setTimeout(function() {
+      for (var r in rs)
+        rs[r].close()
 
-    for(var s in servers)
-      servers[s].close(done)
-
+      for(var s in servers)
+        servers[s].close(done)
+    }, 1000)
   })
 
   t.end()

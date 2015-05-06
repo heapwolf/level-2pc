@@ -238,6 +238,7 @@ function Replicator(db, repl_opts) {
 
     var min = repl_opts.minConsensus || repl_opts.peers.length
     var client = createClient(repl_opts)
+    var failures = 0
 
     client.connect(peer.port, peer.host)
     connections[peername] = client
@@ -246,7 +247,12 @@ function Replicator(db, repl_opts) {
       that.emit('fail', peer.host, peer.port)
     })
 
-    client.on('error', that.emit.bind(that, 'error'))
+    client.on('error', function(err) {
+      that.emit('error', err)
+      if (failures++ == repl_opts.failAfter) {
+        client.emit('fail')
+      }
+    })
 
     client.on('reconnect', function() {
       debug('RECONNECT EVENT %s -> %s', id, peername)
