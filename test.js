@@ -357,6 +357,7 @@ test('more than two peers', function(t) {
 
       servers.r11 = net.createServer(function(con) {
         var server = rs.r11.createServer()
+        server.on('error', function() {})
         server.pipe(con).pipe(server)
 
       }).listen(3011)
@@ -377,7 +378,7 @@ test('more than two peers', function(t) {
       })
 
     }, Math.ceil(Math.random()*1000))
-
+   
   })
 
   test('random set of json encoded records pass', function(t) {
@@ -431,11 +432,13 @@ test('more than two peers', function(t) {
 
     var s12 = net.createServer(function(con) {
       var server = r12.createServer()
+      server.on('error', function() {})
       server.pipe(con).pipe(server)
     }).listen(3012)
 
     var s13 = net.createServer(function(con) {
       var server = r13.createServer()
+      server.on('error', function() {})
       server.pipe(con).pipe(server)
     }).listen(3013)
 
@@ -447,10 +450,11 @@ test('more than two peers', function(t) {
       var opts14 = createOpts(3014, [3012, 3013], 2)
       delete opts14.failAfter
       var r14 = Replicator(dbs.db14, opts14)
-      r13.on('error', function() {})
+      r14.on('error', function() {})
 
       var s14 = net.createServer(function(con) {
         var server = r14.createServer()
+        server.on('error', function() {})
         server.pipe(con).pipe(server)
       }).listen(3014)
 
@@ -529,7 +533,7 @@ test('more than two peers', function(t) {
       t.end()
     })
 
-  })
+  }) 
 
   test('when the databases closes, the replicator disconnects from its peers', function(t) {
 
@@ -538,13 +542,11 @@ test('more than two peers', function(t) {
       t.end()
     })
 
-    setTimeout(function() {
-      for (var r in rs)
-        rs[r].close()
+    for (var r in rs)
+      rs[r].close()
 
-      for(var s in servers)
-        servers[s].close(done)
-    }, 1000)
+    for(var s in servers)
+      servers[s].close(done)
   })
 
   t.end()
