@@ -35,5 +35,16 @@
     "after": "^0.8.1",
     "rimraf": "^2.2.8",
     "tap": "^0.4.13"
-  }
+  },
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hij1nx/level-2pc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hij1nx/level-2pc/issues"
+  },
+  "homepage": "https://github.com/hij1nx/level-2pc#readme"
 }
