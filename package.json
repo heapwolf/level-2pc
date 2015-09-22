@@ -1,6 +1,6 @@
 {
   "name": "level-2pc",
-  "version": "5.4.2",
+  "version": "5.4.3",
   "description": "A two-phase-commit protocol for leveldb.",
   "main": "index.js",
   "scripts": {
@@ -18,7 +18,7 @@
     "p2p"
   ],
   "author": "hij1nx",
-  "homepage": "https://github.com/hij1nx/level-2pc",
+  "homepage": "https://github.com/hij1nx/level-2pc#readme",
   "license": "MIT",
   "dependencies": {
     "debug": "^2.1.1",
@@ -45,6 +45,5 @@
   },
   "bugs": {
     "url": "https://github.com/hij1nx/level-2pc/issues"
-  },
-  "homepage": "https://github.com/hij1nx/level-2pc#readme"
+  }
 }
