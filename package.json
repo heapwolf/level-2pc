@@ -4,7 +4,7 @@
   "description": "A two-phase-commit protocol for leveldb.",
   "main": "index.js",
   "scripts": {
-    "test": "node test.js"
+    "test": "tape test | faucet"
   },
   "keywords": [
     "leveldb",
@@ -33,8 +33,9 @@
   },
   "devDependencies": {
     "after": "^0.8.1",
+    "faucet": "0.0.1",
     "rimraf": "^2.2.8",
-    "tap": "^1.4.1"
+    "tape": "^4.2.2"
   },
   "directories": {
     "test": "test"
