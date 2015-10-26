@@ -3,8 +3,7 @@ var net = require('net')
 var after = require('after')
 var Replicator = require('./index')
 var rmrf = require('rimraf')
-var tap = require('tap')
-var test = tap.test
+var test = require('tape')
 
 function createOpts(localport, ports, min, failAfter) {
   var peers = ports.map(function(port) {
@@ -50,9 +49,7 @@ function createData(prefix, size, type) {
   return Array.apply(null, new Array(size)).map(map).sort(sort)
 }
 
-
-test('more than two peers', function(t) {
-
+function run(t, dbOpts) {
   var i = 16
   var dbs = {}
   var rs = {}
@@ -60,14 +57,20 @@ test('more than two peers', function(t) {
 
   while(i > 0) {
     rmrf.sync('./test/db' + i)
-    dbs['db' + i] = level('./test/db' + i, { keyEncoding: 'utf8', valueEncoding: 'utf8' })
+    dbs['db' + i] = level('./test/db' + i, dbOpts)
     i--
   }
+
+  t.on('end', function () {
+    for (var name in dbs) {
+      dbs[name].close()
+    }
+  })
 
   //
   // create three databases and start them.
   //
-  test('setup', function(t) {
+  t.test('setup', function(t) {
 
     rs.r1 = Replicator(dbs.db1, createOpts(3001, [3002, 3003]))
     rs.r2 = Replicator(dbs.db2, createOpts(3002, [3003, 3001]))
@@ -77,7 +80,7 @@ test('more than two peers', function(t) {
       var server = rs.r1.createServer()
       server.pipe(con).pipe(server)
     }).listen(3001)
-    
+
     servers.r2 = net.createServer(function(con) {
       var server = rs.r2.createServer()
       server.pipe(con).pipe(server)
@@ -98,13 +101,13 @@ test('more than two peers', function(t) {
 
 
 
-  test('that a random number of records put to one peer are replicated to all other peers', function(t) {
+  t.test('that a random number of records put to one peer are replicated to all other peers', function(t) {
 
     var size = 2
     var records = createData('A_', size)
 
     var done = after(records.length, function (err) {
-      t.ok(!err)
+      t.ifError(err)
       var databases = [dbs.db1, dbs.db2, dbs.db3]
       var done2 = after(databases.length, t.end.bind(t))
       databases.forEach(function (db) {
@@ -123,6 +126,7 @@ test('more than two peers', function(t) {
       db.createReadStream({ gte: 'A_', lte: 'A_~' })
         .on('data', function(r) {
           ++count
+          r.key = r.key.toString('binary')
           results.push(r)
         })
         .on('end', function() {
@@ -138,7 +142,7 @@ test('more than two peers', function(t) {
 
 
 
-  test('that records batched to one peer are replicated to all other peers', function(t) {
+  t.test('that records batched to one peer are replicated to all other peers', function(t) {
 
     function chunk(arr, n) {
       return !arr.length ? [] : [arr.slice(0, n)].concat(chunk(arr.slice(n), n))
@@ -149,7 +153,7 @@ test('more than two peers', function(t) {
     var groups = chunk(records, 2)
 
     var done = after(groups.length, function (err) {
-      t.ok(!err)
+      t.ifError(err)
       var databases = [dbs.db2, dbs.db3]
       var done2 = after(databases.length, t.end.bind(t))
       databases.forEach(function (db) {
@@ -169,6 +173,7 @@ test('more than two peers', function(t) {
       var results = []
       db.createReadStream({ gte: 'B_', lte: 'B_~' })
         .on('data', function(r) {
+          r.key = r.key.toString('binary')
           results.push(r)
         })
         .on('end', function() {
@@ -182,13 +187,13 @@ test('more than two peers', function(t) {
 
 
 
-  test('that a single record is added to all peers before returning the callback', function(t) {
+  t.test('that a single record is added to all peers before returning the callback', function(t) {
     dbs.db1.put('test1key', 'test1value', function(err) {
-      t.ok(!err, 'key added to the coordinator and all other peers')
+      t.ifError(err, 'key added to the coordinator and all other peers')
       dbs.db2.get('test1key', function(err) {
-        t.ok(!err, 'key was found in dbs.db2')
+        t.ifError(err, 'key was found in dbs.db2')
         dbs.db3.get('test1key', function(err) {
-          t.ok(!err, 'key was found in dbs.db3')
+          t.ifError(err, 'key was found in dbs.db3')
           t.end()
         })
       })
@@ -197,10 +202,10 @@ test('more than two peers', function(t) {
 
 
 
-  test('that a record can be deleted from one database and it is removed from all others', function(t) {
-    
+  t.test('that a record can be deleted from one database and it is removed from all others', function(t) {
+
     dbs.db1.del('test1key', function(err) {
-      t.ok(!err, 'key added to the coordinator and all other peers')
+      t.ifError(err, 'key added to the coordinator and all other peers')
       dbs.db2.get('test1key', function(err) {
         t.ok(err, 'key was not found in dbs.db2')
         dbs.db3.get('test1key', function(err) {
@@ -213,7 +218,7 @@ test('more than two peers', function(t) {
 
 
 
-  test('writes should not be made if the minimum number of required peers for concensus can not be reached', function(t) {
+  t.test('writes should not be made if the minimum number of required peers for concensus can not be reached', function(t) {
 
     //
     // only retry 4 times in the interests of keeping the test run-time short
@@ -228,7 +233,7 @@ test('more than two peers', function(t) {
       var server = rs.r4.createServer()
       server.pipe(con).pipe(server)
     }).listen(3004)
-    
+
     servers.r5 = net.createServer(function(con) {
       var server = rs.r5.createServer()
       server.pipe(con).pipe(server)
@@ -258,11 +263,11 @@ test('more than two peers', function(t) {
     dbs.db5.put('test1key', 'test1value', function(err) {
       t.ok(err)
     })
-  }) 
+  })
 
 
 
-  test('joining peers in random orders at different times', function(t) {
+  t.test('joining peers in random orders at different times', function(t) {
 
     var base = 1000
 
@@ -303,17 +308,17 @@ test('more than two peers', function(t) {
       }).listen(3008)
 
       dbs.db8.put('test1key', 'test1value', function(err) {
-        t.ok(!err)
+        t.ifError(err)
 
         //
         // after it's been put into dbs.db8 it should be everywhere
         //
         dbs.db6.get('test1key', function(err) {
-          t.ok(!err)
+          t.ifError(err)
           dbs.db7.get('test1key', function(err) {
-            t.ok(!err)
+            t.ifError(err)
             dbs.db8.get('test1key', function(err) {
-              t.ok(!err)
+              t.ifError(err)
               t.end()
             })
           })
@@ -325,7 +330,7 @@ test('more than two peers', function(t) {
   })
 
 
-  test('peer discovery -- peer joins later on', function(t) {
+  t.test('peer discovery -- peer joins later on', function(t) {
 
     rs.r9 = Replicator(dbs.db9, createOpts(3009, [3010], 1))
     rs.r9.on('error', function() {})
@@ -345,9 +350,9 @@ test('more than two peers', function(t) {
 
 
     dbs.db9.put('test1key', 'test1value', function(err) {
-      t.ok(!err)
+      t.ifError(err)
       dbs.db10.get('test1key', function(err) {
-        t.ok(!err);
+        t.ifError(err);
       })
     })
 
@@ -363,31 +368,31 @@ test('more than two peers', function(t) {
       }).listen(3011)
 
       dbs.db11.put('test2key', 'test2value', function(err) {
-        t.ok(!err)
+        t.ifError(err)
 
         //
         // after it's been put into dbs.db8 it should be everywhere
         //
         dbs.db9.get('test2key', function(err) {
-          t.ok(!err)
+          t.ifError(err)
           dbs.db10.get('test2key', function(err) {
-            t.ok(!err)
+            t.ifError(err)
             t.end();
           })
         })
       })
 
     }, Math.ceil(Math.random()*1000))
-   
+
   })
 
-  test('random set of json encoded records pass', function(t) {
+  t.test('random set of json encoded records pass', function(t) {
 
     var size = 2
     var records = createData('C_', size, 'json')
 
     var done = after(records.length, function (err) {
-      t.ok(!err)
+      t.ifError(err)
       var databases = [dbs.db1, dbs.db2, dbs.db3]
       var done2 = after(databases.length, t.end.bind(t))
       databases.forEach(function (db) {
@@ -396,7 +401,7 @@ test('more than two peers', function(t) {
     })
 
     records.forEach(function(record) {
-      dbs.db1.put(record.key, record.value, { keyEncoding: 'utf8', valueEncoding: 'json' }, done)
+      dbs.db1.put(record.key, record.value, { valueEncoding: 'json' }, done)
     })
 
     function verifyRecords(db, cb) {
@@ -406,6 +411,7 @@ test('more than two peers', function(t) {
       db.createReadStream({ gte: 'C_', lte: 'C_~', valueEncoding: 'json' })
         .on('data', function(r) {
           ++count
+          r.key = r.key.toString('binary')
           results.push(r)
         })
         .on('end', function() {
@@ -419,7 +425,7 @@ test('more than two peers', function(t) {
   })
 
 
-  test('closed peers should not try to reconnect if missing failAfter', function(t) {
+  t.test('closed peers should not try to reconnect if missing failAfter', function(t) {
     var opts12 = createOpts(3012, [3013], 1)
     delete opts12.failAfter
     var r12 = Replicator(dbs.db12, opts12)
@@ -445,7 +451,7 @@ test('more than two peers', function(t) {
     var ready = after(2, thirdPeer)
 
     function thirdPeer(err) {
-      t.ok(!err)
+      t.ifError(err)
 
       var opts14 = createOpts(3014, [3012, 3013], 2)
       delete opts14.failAfter
@@ -468,7 +474,7 @@ test('more than two peers', function(t) {
       r14.once('ready', function () {
 
         var notready = after(3, function (err) {
-          t.ok(!err, 'no error')
+          t.ifError(err, 'no error')
           setTimeout(function () {
             t.equal(reconnectAttempts, 0, 'no attempts to reconnect')
             t.end()
@@ -496,7 +502,7 @@ test('more than two peers', function(t) {
 
 
 
-  test('peer with minConsensus 0 should always be in ready state', function(t) {
+  t.test('peer with minConsensus 0 should always be in ready state', function(t) {
     var peer1, peer2
     var servers = []
 
@@ -533,12 +539,12 @@ test('more than two peers', function(t) {
       t.end()
     })
 
-  }) 
+  })
 
-  test('when the databases closes, the replicator disconnects from its peers', function(t) {
+  t.test('when the databases closes, the replicator disconnects from its peers', function(t) {
 
      var done = after(Object.keys(servers).length, function (err) {
-      t.ok(!err, 'no error')
+      t.ifError(err, 'no error')
       t.end()
     })
 
@@ -550,5 +556,17 @@ test('more than two peers', function(t) {
   })
 
   t.end()
+}
+
+
+test('keyEncoding: utf8', function (t) {
+  run(t, { keyEncoding: 'utf8', valueEncoding: 'utf8' })
 })
 
+test('keyEncoding: binary', function (t) {
+  run(t, { keyEncoding: 'binary', valueEncoding: 'utf8' })
+})
+
+test('keyEncoding: bytewise', function (t) {
+  run(t, { keyEncoding: require('bytewise-core'), valueEncoding: 'utf8' })
+})
