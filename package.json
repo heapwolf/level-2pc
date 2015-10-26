@@ -24,6 +24,7 @@
     "debug": "^2.1.1",
     "inherits": "^2.0.1",
     "level": "^1.3.0",
+    "level-codec": "^6.1.0",
     "level-key": "^1.0.0",
     "level-ttl": "^3.1.0",
     "multilevel": "^7.0.1",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "after": "^0.8.1",
+    "bytewise-core": "^1.2.3",
     "faucet": "0.0.1",
     "rimraf": "^2.2.8",
     "tape": "^4.2.2"

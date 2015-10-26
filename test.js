@@ -107,7 +107,7 @@ function run(t, dbOpts) {
     var records = createData('A_', size)
 
     var done = after(records.length, function (err) {
-      t.ok(!err)
+      t.ifError(err)
       var databases = [dbs.db1, dbs.db2, dbs.db3]
       var done2 = after(databases.length, t.end.bind(t))
       databases.forEach(function (db) {
@@ -126,6 +126,7 @@ function run(t, dbOpts) {
       db.createReadStream({ gte: 'A_', lte: 'A_~' })
         .on('data', function(r) {
           ++count
+          r.key = r.key.toString('binary')
           results.push(r)
         })
         .on('end', function() {
@@ -152,7 +153,7 @@ function run(t, dbOpts) {
     var groups = chunk(records, 2)
 
     var done = after(groups.length, function (err) {
-      t.ok(!err)
+      t.ifError(err)
       var databases = [dbs.db2, dbs.db3]
       var done2 = after(databases.length, t.end.bind(t))
       databases.forEach(function (db) {
@@ -172,6 +173,7 @@ function run(t, dbOpts) {
       var results = []
       db.createReadStream({ gte: 'B_', lte: 'B_~' })
         .on('data', function(r) {
+          r.key = r.key.toString('binary')
           results.push(r)
         })
         .on('end', function() {
@@ -187,11 +189,11 @@ function run(t, dbOpts) {
 
   t.test('that a single record is added to all peers before returning the callback', function(t) {
     dbs.db1.put('test1key', 'test1value', function(err) {
-      t.ok(!err, 'key added to the coordinator and all other peers')
+      t.ifError(err, 'key added to the coordinator and all other peers')
       dbs.db2.get('test1key', function(err) {
-        t.ok(!err, 'key was found in dbs.db2')
+        t.ifError(err, 'key was found in dbs.db2')
         dbs.db3.get('test1key', function(err) {
-          t.ok(!err, 'key was found in dbs.db3')
+          t.ifError(err, 'key was found in dbs.db3')
           t.end()
         })
       })
@@ -203,7 +205,7 @@ function run(t, dbOpts) {
   t.test('that a record can be deleted from one database and it is removed from all others', function(t) {
 
     dbs.db1.del('test1key', function(err) {
-      t.ok(!err, 'key added to the coordinator and all other peers')
+      t.ifError(err, 'key added to the coordinator and all other peers')
       dbs.db2.get('test1key', function(err) {
         t.ok(err, 'key was not found in dbs.db2')
         dbs.db3.get('test1key', function(err) {
@@ -306,17 +308,17 @@ function run(t, dbOpts) {
       }).listen(3008)
 
       dbs.db8.put('test1key', 'test1value', function(err) {
-        t.ok(!err)
+        t.ifError(err)
 
         //
         // after it's been put into dbs.db8 it should be everywhere
         //
         dbs.db6.get('test1key', function(err) {
-          t.ok(!err)
+          t.ifError(err)
           dbs.db7.get('test1key', function(err) {
-            t.ok(!err)
+            t.ifError(err)
             dbs.db8.get('test1key', function(err) {
-              t.ok(!err)
+              t.ifError(err)
               t.end()
             })
           })
@@ -348,9 +350,9 @@ function run(t, dbOpts) {
 
 
     dbs.db9.put('test1key', 'test1value', function(err) {
-      t.ok(!err)
+      t.ifError(err)
       dbs.db10.get('test1key', function(err) {
-        t.ok(!err);
+        t.ifError(err);
       })
     })
 
@@ -366,15 +368,15 @@ function run(t, dbOpts) {
       }).listen(3011)
 
       dbs.db11.put('test2key', 'test2value', function(err) {
-        t.ok(!err)
+        t.ifError(err)
 
         //
         // after it's been put into dbs.db8 it should be everywhere
         //
         dbs.db9.get('test2key', function(err) {
-          t.ok(!err)
+          t.ifError(err)
           dbs.db10.get('test2key', function(err) {
-            t.ok(!err)
+            t.ifError(err)
             t.end();
           })
         })
@@ -390,7 +392,7 @@ function run(t, dbOpts) {
     var records = createData('C_', size, 'json')
 
     var done = after(records.length, function (err) {
-      t.ok(!err)
+      t.ifError(err)
       var databases = [dbs.db1, dbs.db2, dbs.db3]
       var done2 = after(databases.length, t.end.bind(t))
       databases.forEach(function (db) {
@@ -399,7 +401,7 @@ function run(t, dbOpts) {
     })
 
     records.forEach(function(record) {
-      dbs.db1.put(record.key, record.value, { keyEncoding: 'utf8', valueEncoding: 'json' }, done)
+      dbs.db1.put(record.key, record.value, { valueEncoding: 'json' }, done)
     })
 
     function verifyRecords(db, cb) {
@@ -409,6 +411,7 @@ function run(t, dbOpts) {
       db.createReadStream({ gte: 'C_', lte: 'C_~', valueEncoding: 'json' })
         .on('data', function(r) {
           ++count
+          r.key = r.key.toString('binary')
           results.push(r)
         })
         .on('end', function() {
@@ -448,7 +451,7 @@ function run(t, dbOpts) {
     var ready = after(2, thirdPeer)
 
     function thirdPeer(err) {
-      t.ok(!err)
+      t.ifError(err)
 
       var opts14 = createOpts(3014, [3012, 3013], 2)
       delete opts14.failAfter
@@ -471,7 +474,7 @@ function run(t, dbOpts) {
       r14.once('ready', function () {
 
         var notready = after(3, function (err) {
-          t.ok(!err, 'no error')
+          t.ifError(err, 'no error')
           setTimeout(function () {
             t.equal(reconnectAttempts, 0, 'no attempts to reconnect')
             t.end()
@@ -541,7 +544,7 @@ function run(t, dbOpts) {
   t.test('when the databases closes, the replicator disconnects from its peers', function(t) {
 
      var done = after(Object.keys(servers).length, function (err) {
-      t.ok(!err, 'no error')
+      t.ifError(err, 'no error')
       t.end()
     })
 
@@ -560,6 +563,10 @@ test('keyEncoding: utf8', function (t) {
   run(t, { keyEncoding: 'utf8', valueEncoding: 'utf8' })
 })
 
-// test('keyEncoding: binary', function (t) {
-//   run(t, { keyEncoding: 'binary', valueEncoding: 'utf8' })
-// })
+test('keyEncoding: binary', function (t) {
+  run(t, { keyEncoding: 'binary', valueEncoding: 'utf8' })
+})
+
+test('keyEncoding: bytewise', function (t) {
+  run(t, { keyEncoding: require('bytewise-core'), valueEncoding: 'utf8' })
+})

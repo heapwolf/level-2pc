@@ -4,6 +4,7 @@ var xtend = require('xtend')
 var debug = require('debug')('level2pc')
 var inherits = require('inherits')
 var Emitter = require('events').EventEmitter
+var Codec = require('level-codec')
 
 var prefix = '\xffxxl\xff'
 
@@ -25,6 +26,52 @@ function Replicator(db, repl_opts) {
   _db.batch = db.batch.bind(db)
   _db.close = db.close.bind(db)
 
+  // encode keys and values before sending pushing them through the rpc stream
+  var codec = new Codec(db.options)
+
+  var DEL = {}
+
+  function encodeOp(key, value, opts) {
+    var op = {}
+    op.key = codec.encodeKey(key, opts)
+    op.keyEncoding = codec.keyAsBuffer(opts) ? 'binary' : 'utf8'
+
+    op.type = value === DEL ? 'del' : 'put'
+
+    if (op.type == 'put') {
+      op.value = codec.encodeValue(value, opts)
+      op.valueEncoding = codec.valueAsBuffer(opts) ? 'binary' : 'utf8'
+    }
+
+    return op
+  }
+
+  function encodeOps(arr, opts) {
+    // force utf8 or binary value encoding
+    return codec.encodeBatch(arr, opts).map(function (op) {
+      if (op.keyEncoding != 'binary') {
+        op.keyEncoding = 'utf8'
+      }
+      if ('value' in op && op.valueEncoding != 'binary') {
+        op.valueEncoding = 'utf8'
+      }
+      return op
+    })
+  }
+
+  function encodePrefix(op) {
+    if (typeof op.key === 'string') return prefix + op
+    return new Buffer(prefix + op.key.toString('binary'), 'binary')
+  }
+
+  function prefixRemoveOp(op) {
+    return {
+      type: 'del',
+      key: encodePrefix(op),
+      keyEncoding: op.keyEncoding
+    }
+  }
+
 
   db.addPeer = function addPeer(peer) {
     connect(peer)
@@ -44,41 +91,50 @@ function Replicator(db, repl_opts) {
 
 
   db.commit = function commit(op, cb) {
-    op.opts = op.opts || {}
-
+    var arr
+    var opts
     if (op.type == 'batch') {
-      op.value.forEach(function(o) {
-        op.value.push({ type: 'del', key: prefix + o.key })
+      opts = op.opts
+      arr = op.value
+      arr.forEach(function(o) {
+        arr.push(prefixRemoveOp(o))
       })
     }
     else {
-      op.value = [
-        { type: 'del', key: prefix + op.key },
-        {
-          type: op.type,
-          key: op.key,
-          value: op.value,
-          keyEncoding: op.keyEncoding || db.options.keyEncoding || 'utf8',
-          valueEncoding: op.valueEncoding || db.options.valueEncoding || 'utf8'
-        }
-      ]
+      opts = {}
+      arr = [ prefixRemoveOp(op), op ]
     }
 
-    debug('COMMIT @%d [%j]', repl_opts.port, op.value)
+    debug('COMMIT @%d [%j]', repl_opts.port, arr)
 
-    _db.batch(op.value, op.opts, cb)
+    _db.batch(arr, opts, cb)
   }
 
 
-  db.del = function del(key, cb) {
+  db.del = function del(key, opts, cb) {
 
-    if (key.indexOf(prefix) == 0)
+    // TODO: is this really necessary?
+    if (key.toString('binary').indexOf(prefix) == 0)
       return _db.del.apply(_db, arguments)
 
+    if ('function' == typeof opts) {
+      cb = opts
+      opts = {}
+    }
+
+    var op
     queue(function() {
-      _db.del(prefix + key, function(err) {
+      try {
+        op = encodeOp(key, DEL, opts)
+      }
+      catch (err) {
+        return cb(err)
+      }
+
+      var _opts = { keyEncoding: op.keyEncoding }
+      _db.del(encodePrefix(op), _opts, function(err) {
         if (err) return cb(err)
-        var op = { type: 'del', key: key }
+
         replicate(op, cb)
       })
     })
@@ -92,17 +148,18 @@ function Replicator(db, repl_opts) {
       opts = {}
     }
 
+    var op
     queue(function() {
-      _db.put(prefix + key, value, opts, function(err) {
-        if (err) return cb(err)
+      try {
+        op = encodeOp(key, value, opts)
+      }
+      catch (err) {
+        return cb(err)
+      }
 
-        var op = {
-          type: 'put',
-          key: key,
-          value: value,
-          keyEncoding: opts.keyEncoding || db.options.keyEncoding || 'utf8',
-          valueEncoding: opts.valueEncoding || db.options.valueEncoding || 'utf8'
-        }
+      var _opts = { keyEncoding: op.keyEncoding }
+      _db.put(encodePrefix(op), op.value, _opts, function (err) {
+        if (err) return cb(err)
 
         replicate(op, cb)
       })
@@ -112,7 +169,8 @@ function Replicator(db, repl_opts) {
 
   db.batch = function batch(arr, opts, cb) {
 
-    if (arr[0] && arr[0].key.indexOf(prefix) == 0)
+    // TODO: is this really necessary?
+    if (arr[0] && arr[0].key.toString('binary').indexOf(prefix) == 0)
       return _db.batch.apply(_db, arguments)
 
     if ('function' == typeof opts) {
@@ -120,39 +178,23 @@ function Replicator(db, repl_opts) {
       opts = {}
     }
 
+    var ops
+    var prefixes
     queue(function() {
-      _db.batch(prefixOps(arr), opts, function(err) {
-        arr.map(function(a) {
-          if (a.type == 'put') {
-            a.keyEncoding = a.keyEncoding || opts.keyEncoding || 'utf8'
-            a.valueEncoding = a.valueEncoding || opts.valueEncoding || 'utf8'
-          }
+      try {
+        ops = encodeOps(arr, opts)
+        prefixed = ops.map(function (op) {
+          return xtend(op, { key: encodePrefix(op) })
         })
+      }
+      catch (err) {
+        return cb(err)
+      }
 
-        var op = { type: 'batch', value: arr }
-        replicate(op, cb)
+      _db.batch(prefixed, opts, function (err) {
+        replicate({ type: 'batch', value: ops, opts: opts }, cb)
       })
     })
-  }
-
-
-  function prefixWithPeer(peer) {
-    return prefix + '!' + peer + '!'
-  }
-
-
-  function prefixOps(arr) {
-    var ops = []
-    arr.map(function opsMap(op) {
-      ops.push({
-        key: prefix + op.key,
-        value: op.value,
-        type: op.type,
-        keyEncoding: 'utf8',
-        valueEncoding: 'utf8'
-      })
-    })
-    return ops
   }
 
 
@@ -202,7 +244,7 @@ function Replicator(db, repl_opts) {
 
 
   function queue(fn) {
-    if (that._isReady) fn()
+    if (that._isReady) process.nextTick(fn)
     else that.once('ready', fn)
   }
 
